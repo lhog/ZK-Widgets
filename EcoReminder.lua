@@ -125,10 +125,14 @@ end
 local flashIdleWorkers=false
 local flashMetalExcess=false
 local gracePeriod=30*30 --first 30 seconds of the game
+local magicNumber = 10000
 local function CheckAndSetFlashMetalExcess(frame)
 	if frame<gracePeriod then return end
 	
 	local mCurr, mStor, mPull, mInco, mExpe, mShar, mSent, mReci = spGetTeamResources(myTeamId, "metal")
+	
+	mStor = mStor - magicNumber
+	--ePrintEx({ mCurr=mCurr, mStor=mStor, mPull=mPull, mInco=mInco, mExpe=mExpe, mShar=mShar, mSent=mSent, mReci=mReci})
 	
 	local mStorageLeft=mStor-mCurr
 	if mStorageLeft<0 then mStorageLeft=0 end
