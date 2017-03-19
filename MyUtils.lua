@@ -71,7 +71,6 @@ WindGroundExtreme=spGetGameRulesParam("WindGroundExtreme") or 1
 WindSlope=spGetGameRulesParam("WindSlope") or 0
 
 WaterDamage=Game.waterDamage or 0
-is91 = (Game.version:find('91.0') == 1)
 
 paralyzeOnMaxHealth = ( (VFS.Include("gamedata/modrules.lua") or {}).paralyze or {}).paralyzeOnMaxHealth or true
 
@@ -411,7 +410,7 @@ end
 
 --------------------Eco utils -----------------------
 myTeamId=spGetMyTeamID()
-gaiaTeamId = ((Game.version:find('91.0') == 1)) and -1 or spGetGaiaTeamID()
+gaiaTeamId = spGetGaiaTeamID()
 
 
 --------------------Construction Stuff---------------
