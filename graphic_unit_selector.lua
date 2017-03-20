@@ -11,10 +11,12 @@ function widget:GetInfo()
 		layer     = 15,
 		enabled   = true,
 	}
-end -- All widgets/gadgets need this to run. You can declare variables before it though. This tells the engine this is a widget.
+end
 
---config--
-local debug = false
+------------------------------------------------------------------------------------------------------------
+---  CONFIG
+------------------------------------------------------------------------------------------------------------
+
 local color = {
 	raider = {0.25,0.41,1},
 	assault = {0.86,0.08,0.24},
@@ -30,7 +32,7 @@ local color = {
 	shrink = {1,0.08,0.58},
 }
 
-local keypresses = {
+local keysByClass = {
 	raider = KEYSYMS.N_1,
 	assault = KEYSYMS.N_3,
 	riot = KEYSYMS.N_2,
@@ -40,371 +42,332 @@ local keypresses = {
 	special1 = KEYSYMS.N_7,
 	special2 = KEYSYMS.N_8,
 	conunit = KEYSYMS.N_0,
+}
+
+local classByKeys = {}
+for k, v in pairs(keysByClass) do
+	classByKeys[v] = k
+end
+
+local keysAux={
 	plus = KEYSYMS.KP6,
 	minus = KEYSYMS.KP4,
 }
  
-local triggerkeys = {
-	[keypresses.raider] = true,
-	[keypresses.skirm] = true,
-	[keypresses.riot] = true,
-	[keypresses.assault] = true,
-	[keypresses.arty] = true,
-	[keypresses.special1] = true,
-	[keypresses.special2] = true,
-	[keypresses.aaunit] = true,
-	[keypresses.conunit] = true,
+local triggerKeys = {
+	[keysByClass.raider] = true,
+	[keysByClass.skirm] = true,
+	[keysByClass.riot] = true,
+	[keysByClass.assault] = true,
+	[keysByClass.arty] = true,
+	[keysByClass.special1] = true,
+	[keysByClass.special2] = true,
+	[keysByClass.aaunit] = true,
+	[keysByClass.conunit] = true,
 }
 
-local keyHoldTime = 0.2
+local triggerKeysAux = {
+	[keysAux.plus] = true,
+	[keysAux.minus] = true,
+}
 
-local rad = 1250
-local on = false
-local ontype = "none" -- we'll use ontype and on to talk to gameframe and drawworld.
-local unittypes = {
+local keyHoldTime = 0.1
+
+local rad = 1000
+local unitTypes = {
 	raider = {
-		armpw = 1,
-		corak = 1,
-		corgator = 1,
-		amphraider3 = 1,
-		corfav = 1,
-		corpyro = 1,
-		corsh = 1,
-		subraider = 1,
-		logkoda = 1,
-		armkam = 1,
-		puppy = 1,
-		panther = 1,
-		amphraider2 = 1,
+		armflea = true,
+		armpw = true,
+		corak = true,
+		corgator = true,
+		amphraider3 = true,
+		corfav = true,
+		corpyro = true,
+		corsh = true,
+		subraider = true,
+		logkoda = true,
+		armkam = true,
+		puppy = true,
+		panther = true,		
 	},
 	skirm = {
-		armrock = 1,
-		armsptk = 1,
-		slowmort = 1,
-		corstorm = 1,
-		shipskirm = 1,
-		amphfloater = 1,
-		cormist = 1,
-		gunshipsupport = 1,
-		shieldfelon = 1,
-		nsaclash = 1,
+		armrock = true,
+		armsptk = true,
+		slowmort = true,
+		corstorm = true,
+		shipskirm = true,
+		amphfloater = true,
+		cormist = true,
+		gunshipsupport = true,
+		shieldfelon = true,
+		nsaclash = true,
 	},
 	riot = {
-		armwar = 1,
-		cormak = 1,
-		spiderriot = 1,
-		arm_venom = 1,
-		jumpblackhole = 1,
-		corlevlr = 1,
-		tawf114 = 1,
-		amphriot = 1,
-		shiptorp = 1,
-		hoverriot = 1,
-		blackdawn = 1,
+		corhurc2 = true,
+		amphraider2 = true,	
+		armwar = true,
+		cormak = true,
+		spiderriot = true,
+		arm_venom = true,
+		jumpblackhole = true,
+		corlevlr = true,
+		tawf114 = true,
+		amphriot = true,
+		shiptorp = true,
+		hoverriot = true,
+		blackdawn = true,
 	},
 	assault = {
-		corsumo = 1,
-		armzeus = 1,
-		armorco = 1,
-		spiderassault = 1,
-		corgol = 1,
-		correap = 1,
-		shipraider = 1,
-		amphassault = 1,
-		corraid = 1,
-		corthud = 1,
-		corcan = 1,
-		hoverassault = 1,
+		corsumo = true,
+		armzeus = true,
+		armorco = true,
+		spiderassault = true,
+		corgol = true,
+		correap = true,
+		shipraider = true,
+		amphassault = true,
+		corraid = true,
+		corthud = true,
+		corcan = true,
+		hoverassault = true,
 	},
 	arty = {
-		armham = 1,
-		armraven = 1,
-		shieldarty = 1,
-		firewalker = 1,
-		corgarp = 1,
-		cormart = 1,
-		armcrabe = 1,
-		shiparty = 1,
-		corbats = 1,
-		reef = 1,
-		armmanni = 1,
-		armbrawl = 1,
-		trem = 1,
-		armsptk = 1,
-		armmerl = 1,
+		armham = true,
+		armraven = true,
+		shieldarty = true,
+		firewalker = true,
+		corgarp = true,
+		cormart = true,
+		armcrabe = true,
+		shiparty = true,
+		corbats = true,
+		reef = true,
+		armmanni = true,
+		armbrawl = true,
+		trem = true,
+		armsptk = true,
+		armmerl = true,
 	},
 	special1 = {
-		corclog = 1,
-		spherepole = 1,
-		capturecar = 1,
-		blastwing = 1,
-		hoverdepthcharge = 1,
-		armspy = 1,
-		shipscout = 1,
-		spherecloaker = 1,
-		core_spectre = 1,
+		corclog = true,
+		spherepole = true,
+		capturecar = true,
+		blastwing = true,
+		hoverdepthcharge = true,
+		armspy = true,
+		shipscout = true,
+		spherecloaker = true,
+		core_spectre = true,
 	},
 	special2 = {
-		corvalk = 1,
-		corcrw = 1,
-		corroach = 1,
-		armtick = 1,
-		armmerl = 1,
-		bladew = 1,
-		corsktl = 1,
-		corbtrans = 1,
-		subarty = 1,
-		armflea = 1,
+		corvalk = true,
+		corcrw = true,
+		corroach = true,
+		armtick = true,
+		armmerl = true,
+		bladew = true,
+		corsktl = true,
+		corbtrans = true,
+		subarty = true,
+		armflea = true,
 	},
 	aaunit = {
-		gunshipaa = 1,
-		corcrash = 1,
-		armjeth = 1,
-		vehaa = 1,
-		hoveraa = 1,
-		amphaa = 1,
-		spideraa = 1,
-		armaak = 1,
-		corsent = 1,
-		shipaa = 1,
+		fighter = true,
+		corvamp = true,
+		gunshipaa = true,
+		corcrash = true,
+		armjeth = true,
+		vehaa = true,
+		hoveraa = true,
+		amphaa = true,
+		spideraa = true,
+		armaak = true,
+		corsent = true,
+		shipaa = true,
 	},
 	conunit = {
-		amphcon = 1,
-		armca = 1,
-		armrectr = 1,
-		arm_spider = 1,
-		corfast = 1,
-		coracv = 1,
-		corch = 1,
-		cornecro = 1,
-		corned = 1,
-		gunshipcon = 1,
-		shipcon = 1,
+		amphcon = true,
+		armca = true,
+		armrectr = true,
+		arm_spider = true,
+		corfast = true,
+		coracv = true,
+		corch = true,
+		cornecro = true,
+		corned = true,
+		gunshipcon = true,
+		shipcon = true,
 	},
 }
- 
-local selection = {}
-local selected = {}
-local checked = {}
-local radchanged = false
-local originalrad = rad
-local radchangeddrawtime = 0
-local lastrelease = -1
 
-local shiftKey = nil
-local keyPressedTime = 0
-function widget:KeyPress(key, mods, isRepeat) -- This callin is triggered whenever the user presses a key.
-	shiftKey = mods["shift"]
+------------------------------------------------------------------------------------------------------------
+---  END OF CONFIG
+------------------------------------------------------------------------------------------------------------
 
-	if keyPressedTime == 0 then
-		keyPressedTime = Spring.GetTimer()
-	end	
-	
-	if key == keypresses.plus then
-		if radchanged == false then
-			originalrad = rad
-			radchangeddrawtime = 4
-		end
-		rad = rad+20
-		radchanged = true
-	end
-
-	if key == keypresses.minus and rad > 101 then
-		if radchanged == false then
-			originalrad = rad
-			radchangeddrawtime = 4
-		end
-		rad = rad-20    
-		radchanged = true
-	end
-
-	if key == keypresses.minus and rad < 101 then
-		if radchanged == false then
-			originalrad = rad
-			radchangeddrawtime = 8
-		end
-		radchanged = true
-	end
-
-	if isRepeat == false and debug then
-		Spring.Echo("game_message: key: " .. key)
-	end
-	
-	local timeOk = Spring.DiffTimers(Spring.GetTimer(), keyPressedTime) >= keyHoldTime
-
-	if key == keypresses.raider and ontype == "none" and timeOk then --Here keypresses.raider is the same as keypresses["raider"]. This is how you look up values in a table.
-		on = true -- we're using this variable to talk to KeyRelease and DrawWorld. This way then they know we're working on getting a selection going.
-		ontype = "raider"
-	end
-
-	if key == keypresses.skirm and ontype == "none" and timeOk then
-		on = true
-		ontype = "skirm"
-	end
-
-	if key == keypresses.riot and ontype == "none" and timeOk then
-		on = true
-		ontype = "riot"
-	end
-
-	if key == keypresses.assault  and ontype == "none" and timeOk then
-		on = true
-		ontype = "assault"
-	end
-
-	if key == keypresses.arty  and ontype == "none" and timeOk then
-		on = true
-		ontype = "arty"
-	end
-
-	if key == keypresses.special1  and ontype == "none" and timeOk then
-		on = true
-		ontype = "special1"
-	end
-
-	if key == keypresses.special2  and ontype == "none" and timeOk then
-		on = true
-		ontype = "special2"
-	end
-
-	if key == keypresses.aaunit  and ontype == "none" and timeOk and timeOk then
-		on = true
-		ontype = "aaunit"
-	end
-
-	if key == keypresses.conunit  and ontype == "none" and timeOk then
-		on = true
-		ontype = "conunit"
+function widget:Initialize()
+	--Unload if in replay or if mod is not Zero-K
+	if Spring.IsReplay() or string.upper(Game.modShortName or "") ~= "ZK" then
+		widgetHandler:RemoveWidget()
 	end
 end
 
-function widget:GameFrame(f) -- called once every frame. This is so we don't keep looking for units every keypress.
-	if radchanged then
-		radchangeddrawtime = radchangeddrawtime - 1    
-		if radchangeddrawtime == 0 then
-			radchanged = false
+function widget:GameOver(winningAllyTeams)
+	--GameOver is irreversable with cheats, thus removing	
+	widgetHandler:RemoveWidget() 
+end
+
+local unloaded = false
+local function CheckIfSpectator()	
+	--spectator state is reversable with cheats
+	if Spring.GetSpectatingState() then
+		widgetHandler:RemoveCallIn("KeyPress")
+		widgetHandler:RemoveCallIn("KeyRelease")
+		widgetHandler:RemoveCallIn("Update")
+		widgetHandler:RemoveCallIn("DrawWorld")
+		unloaded = true
+	else
+		if unloaded then
+			widgetHandler:UpdateCallIn("KeyPress")
+			widgetHandler:UpdateCallIn("KeyRelease")
+			widgetHandler:UpdateCallIn("Update")
+			widgetHandler:UpdateCallIn("DrawWorld")
+			unloaded = false
 		end
 	end
+end
+
+local myTeamID = Spring.GetMyTeamID()
+function widget:TeamChanged(teamID)	
+	CheckIfSpectator()
+	myTeamID = Spring.GetMyTeamID()
+end
+
+function widget:PlayerChanged(playerID)
+	CheckIfSpectator()
+	myTeamID = Spring.GetMyTeamID()
+end
+
+function widget:PlayerAdded(playerID)
+	CheckIfSpectator()
+	myTeamID = Spring.GetMyTeamID()
+end
+
+function widget:PlayerRemoved(playerID)
+	CheckIfSpectator()
+	myTeamID = Spring.GetMyTeamID()
+end
+
+function widget:TeamDied(teamID)
+	CheckIfSpectator()
+	myTeamID = Spring.GetMyTeamID()
+end
+
+function widget:TeamChanged(teamID)
+	CheckIfSpectator()
+	myTeamID = Spring.GetMyTeamID()
+end
 
 
-	if f%2 == 0 then -- % - remainers left after divided by the second number. here it's framenum divided by 2. So this happens every 2nd frame.
-		if Spring.IsGameOver() or Spring.GetSpectatingState() then
-			Spring.Log(widget:GetInfo().name, LOG.ERROR, "Removing widget for spectator and after game has ended")
-			widgetHandler:RemoveWidget(widget)
+local selection = {}
+
+local on = false
+local ontype = "none"
+
+local keyPressedTime = 0
+function widget:KeyPress(key, mods, isRepeat)
+	if triggerKeysAux[key] then	
+		if key == keysAux.plus then
+			rad = math.min(3000, rad+100)			
 		end
 
-		-- this has performance impact, test in use
-		if on and ontype ~= "none" then
-			local x,y = Spring.GetMouseState()
-			local _,pos = Spring.TraceScreenRay(x,y,true)
-			if type(pos) == "table" then -- prevent crashing from attempting to index a number value. The above seems to give random numbers sometimes.
-				x = pos[1];y = pos[3];pos = nil -- ; is effectively a new line in LUA. This just makes your code look nicer.
-			else
-				if Spring.ValidUnitID(pos) then
-					x,_,y = Spring.GetUnitPosition(pos)
-				end
-			end
-			if x ~= nil and y ~= nil then
-				for _,id in pairs(Spring.GetUnitsInCylinder(x,y,rad,Spring.GetMyTeamID())) do -- Here we're skipping the creation of the table altogether in favor of just plugging in the results of 'getunitsincylinder'
-					if checked[id] == nil and unittypes[ontype][UnitDefs[Spring.GetUnitDefID(id)].name] and not selected[id] then -- Here we're using LUA's if true or exists logic. This says 'if this unit's unitdefid exists as a value in this table AND it's not a key in selected, then do this. This means units must match on the table and be a unique unit
-						if debug then Spring.Echo("game_message: Selected " .. id) end
-						selection[#selection+1] = id
-						selected[id] = id
-					end
-					checked[id] = 1
-				end
-			end          
+		if key == keysAux.minus then
+			rad = math.max(100, rad-100)			
+		end		
+	end
+
+	if triggerKeys[key] then	
+		if keyPressedTime == 0 then
+			keyPressedTime = Spring.GetTimer()
+		end		
+		
+		local timeOk = Spring.DiffTimers(Spring.GetTimer(), keyPressedTime) >= keyHoldTime		
+		if timeOk then
+			on = true
+			ontype = tostring(classByKeys[key])			
 		end
 	end
 end
 
 function widget:KeyRelease(key) -- Called whenever user stops pressing a key.
-	if triggerkeys[key] then
+	if triggerKeys[key] then
 		keyPressedTime = 0
-		if on then		
-			on = false
-			ontype = "none"
+		local _, _, _, shiftKey = Spring.GetModKeyState()
+		if #selection > 0 then
+			Spring.SelectUnitArray(selection, shiftKey)
+		end
+		selection = {}
+		on = false
+		ontype = "none"
+	end
+end
+
+local x, y, z
+local unitsPos
+function widget:Update()
+	if on then
+		local mouseX, mouseY = Spring.GetMouseState()
+		local desc, pos = Spring.TraceScreenRay(mouseX, mouseY, true)	
+		if desc ~= nil then
+			x, y, z = pos[1], pos[2], pos[3]
 			
-			local olderSelection = {}
-			if shiftKey then
-				olderSelection = Spring.GetSelectedUnits()
+			selection = {}
+			for _, uID in ipairs(Spring.GetUnitsInCylinder(x, z, rad, myTeamID)) do
+				if unitTypes[ontype][UnitDefs[Spring.GetUnitDefID(uID)].name] then
+					selection[#selection + 1] = uID
+				end
 			end
 			
-			for _,id in pairs(olderSelection) do
-				selection[#selection+1] = id
+			unitsPos = {}
+			for _, uID in ipairs(selection) do
+				if Spring.ValidUnitID(uID) then
+					local ux, uy, uz = Spring.GetUnitPosition(uID)
+					unitsPos[uID] = {
+						ux = ux,
+						uy = uy,
+						uz = uz,
+					}
+				end
 			end
-			
-			Spring.SelectUnitArray(selection,false)
-			
-			selection = {} -- clear the table.
-			selected = {}
-			checked = {}
+		else
+			x = nil
 		end
 	end
 end
 
 function widget:DrawWorld() -- this is used for openGL stuff.
-	if on or radchanged then
-		local x,y = Spring.GetMouseState()
-		local _,pos = Spring.TraceScreenRay(x,y,true)
-		x,y = nil
-		if type(pos) == "number" then -- prevent crashing from attempting to index a number value. The above seems to give random numbers sometimes.
-			if Spring.ValidUnitID(pos) then
-				local id = pos
-				pos = {}
-				pos[1],pos[2],pos[3] = Spring.GetUnitPosition(id)
-				id = nil
-			elseif Spring.ValidFeatureID(pos) then -- This is also not needed...
-				local id = pos                       --
-				pos = {}                             --
-				pos[1],pos[2],pos[3] = Spring.GetFeaturePosition(id) --
-			end                                    --
-		end
-
-	if on then
-		if type(pos) == "table" and pos[1] ~= nil and pos[2] ~= nil then
-			gl.PushMatrix() --This is the start of an openGL function.
-			gl.LineStipple(true)
-			gl.LineWidth(2.0)
-			gl.Color(color[ontype][1],color[ontype][2],color[ontype][3],1)
-			gl.DrawGroundCircle(pos[1], pos[2], pos[3], rad, 40) -- draws a simple circle.
-			gl.Translate(pos[1],pos[2],pos[3])
-			gl.Billboard()
-			gl.Text("Selecting " .. ontype,-0,-25,36,"v") -- Displays text. First value is the string, second is a modifier for x (in this case it's x-25), third is a modifier for y, fourth is the size, then last is a modifier for the text itself. "v" means vertical align.
-			gl.Color(1,1,1,1) -- we have to reset what we did here.
-			gl.LineWidth(1.0)
-			gl.LineStipple(false)
-			gl.PopMatrix() -- end of function. Have to use this with after a push!
-		end
-	end
-
-	if radchanged and not on and type(pos) == "table" and originalrad then
-		gl.PushMatrix()
-		gl.LineWidth(1.0)
-		gl.Color(1,1,1,1)
-		gl.DrawGroundCircle(pos[1],pos[2],pos[3],originalrad,40) 
-		gl.Translate(pos[1],pos[2],pos[3])
+	if on and x then	
+		gl.PushMatrix() --This is the start of an openGL function.
+		gl.LineStipple(true)
+		gl.LineWidth(2.0)
+		gl.Color(color[ontype][1], color[ontype][2], color[ontype][3], 1)
+		gl.DrawGroundCircle(x, y, z, rad, 40) -- draws a simple circle.
+		gl.Translate(x, y, z)
 		gl.Billboard()
-		gl.Text("Unit selection circle size: " .. rad,-105,10,15,"v")
+		gl.Text("Selecting " .. ontype, -0, -25, 36, "v") -- Displays text. First value is the string, second is a modifier for x (in this case it's x-25), third is a modifier for y, fourth is the size, then last is a modifier for the text itself. "v" means vertical align.
+		gl.Color(1, 1, 1, 1) -- we have to reset what we did here.
 		gl.LineWidth(1.0)
-		gl.Color(1,1,1,1)
-		gl.PopMatrix()
-	end
-	pos = nil
-	end
+		gl.LineStipple(false)
+		gl.PopMatrix() -- end of function. Have to use this with after a push!
+		
 
-	if #selection > 0 then -- Draw circles around selected units. #tablename is the length of the ordered table (or last consecutive value)
-		local pos = {}
-		for i=1,#selection do -- do this for every entry in the ordered table. i is the incremental value. i=1 means that the first value is 1. i increases by 1 (or a third value if provided eg 1,5,0.25 would do 1 + 0.25 every execution) with every execution and will continue until i == #selection. i=1,#table is very useful for doing things to every entry in an ordered table.
-			if Spring.ValidUnitID(selection[i]) then
-				pos[1],pos[2],pos[3] = Spring.GetUnitPosition(selection[i])
-				gl.PushMatrix()
-				gl.LineWidth(3.0)
-				gl.Color(color[ontype][1],color[ontype][2],color[ontype][3],1)
-				gl.DrawGroundCircle(pos[1],pos[2],pos[3],40,40)
-				gl.Color(1,1,1,1)
-				gl.PopMatrix()
-			end
+		for _, uID in ipairs(selection) do
+			gl.PushMatrix()
+			gl.LineWidth(3.0)
+			gl.Color(color[ontype][1], color[ontype][2], color[ontype][3] ,1)
+			gl.DrawGroundCircle(unitsPos[uID].ux, unitsPos[uID].uy, unitsPos[uID].uz, 40, 40)
+			gl.Color(1, 1, 1, 1)
+			gl.PopMatrix()
 		end
+		
 	end
 end
