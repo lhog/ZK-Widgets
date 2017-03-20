@@ -157,7 +157,7 @@ local checkFrequency=30
 local checkFrequencyBias=30%math.floor(checkFrequency/2)
 local waitIdlePeriod=2*30 --x times second(s)
 
-function widget:GameFrame(frame)	
+function widget:GameFrame(frame)
 	if frame%checkFrequency==checkFrequencyBias then
 		flashIdleWorkers=false
 		for uId, storedFrame in pairs(idleList) do			
@@ -185,7 +185,7 @@ local function DrawBigFlashingRect()
 end
 
 function widget:DrawScreen()
-	if Spring.IsGUIHidden() then return end
+	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end	
 
 	--rgba
 	if flashMetalExcess or flashIdleWorkers then
