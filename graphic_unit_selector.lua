@@ -71,7 +71,7 @@ local triggerKeysAux = {
 	[keysAux.minus] = true,
 }
 
-local keyHoldTime = 0.1
+local keyHoldTime = 0.025
 
 local rad = 1000
 local unitTypes = {
@@ -353,7 +353,7 @@ function widget:DrawWorld() -- this is used for openGL stuff.
 		gl.DrawGroundCircle(x, y, z, rad, 40) -- draws a simple circle.
 		gl.Translate(x, y, z)
 		gl.Billboard()
-		gl.Text("Selecting " .. ontype, -0, -25, 36, "v") -- Displays text. First value is the string, second is a modifier for x (in this case it's x-25), third is a modifier for y, fourth is the size, then last is a modifier for the text itself. "v" means vertical align.
+		gl.Text("Selecting " .. ontype, 30, -25, 36, "v") -- Displays text. First value is the string, second is a modifier for x (in this case it's x-25), third is a modifier for y, fourth is the size, then last is a modifier for the text itself. "v" means vertical align.
 		gl.Color(1, 1, 1, 1) -- we have to reset what we did here.
 		gl.LineWidth(1.0)
 		gl.LineStipple(false)
