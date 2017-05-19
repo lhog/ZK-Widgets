@@ -1,12 +1,12 @@
 include('keysym.h.lua')
 
-local version = "0.2" -- String declaration. We can do this before the GetInfo callin (event).
+local version = "0.3" -- String declaration. We can do this before the GetInfo callin (event).
 function widget:GetInfo()
 	return {
 		name      = "Graphic Unit selector " .. version, -- .. means to combine two strings. The second string, 'version' (see above) is added to the end of this string.
 		desc      = "Selects units when a user presses a certain key.",
-		author    = "Shaman, mod by Helwor, NCG",
-		date      = "June 13, 2016",
+		author    = "Shaman, mod by Helwor, NCG. Almost total rewrite ivand",
+		date      = "May, 2017",
 		license   = "None",
 		layer     = 15,
 		enabled   = true,
@@ -71,7 +71,7 @@ local triggerKeysAux = {
 	[keysAux.minus] = true,
 }
 
-local keyHoldTime = 0.025
+local keyHoldTime = 0.01
 
 local rad = 1000
 local unitTypes = {
