@@ -81,44 +81,44 @@ mapSizeZ=Game.mapSizeZ
 
 terraunit=UnitDefNames["terraunit"] --Terraform Unit
 
-caretaker=UnitDefNames["armnanotc"] --Caretaker
-cormex=UnitDefNames["cormex"] --Metal Extractor
+caretaker=UnitDefNames["staticcon"] --Caretaker
+cormex=UnitDefNames["staticmex"] --Metal Extractor
 
-windGen=UnitDefNames["armwin"] --Wind Generator
-solar=UnitDefNames["armsolar"] --Solar Generator
-geo=UnitDefNames["geo"] --Geothermal Generator
-geoMoho=UnitDefNames["amgeo"] --Moho Geothermal Generator
-fusion=UnitDefNames["armfus"] --Fusion generator
-singu=UnitDefNames["cafus"] --Singularity reactor
+windGen=UnitDefNames["energywind"] --Wind Generator
+solar=UnitDefNames["energysolar"] --Solar Generator
+geo=UnitDefNames["energygeo"] --Geothermal Generator
+geoMoho=UnitDefNames["energyheavygeo"] --Moho Geothermal Generator
+fusion=UnitDefNames["energyfusion"] --Fusion generator
+singu=UnitDefNames["energysingu"] --Singularity reactor
 
-storage=UnitDefNames["armmstor"] --Storage
+storage=UnitDefNames["staticstorage"] --Storage
 
-pylon=UnitDefNames["armestor"] --energy transmission pylon
+pylon=UnitDefNames["energypylon"] --energy transmission pylon
 
-llt=UnitDefNames["corllt"] --LLT
-defender=UnitDefNames["corrl"] --Defender
-hlt=UnitDefNames["corhlt"] --HLT
-gauss=UnitDefNames["armpb"] --gauss
-faraday=UnitDefNames["armartic"] --faraday
-newton=UnitDefNames["corgrav"] --newton
-stardust=UnitDefNames["armdeva"] --stardust
-ddm=UnitDefNames["cordoom"] --DDM
-anni=UnitDefNames["armanni"] --Annihilator
-razor=UnitDefNames["corrazor"] --Razor AA
-cobra=UnitDefNames["corflak"] -- Cobra AA
-screamer=UnitDefNames["screamer"] --Screamer AA
-chainsaw=UnitDefNames["armcir"] --Chainsaw
+llt=UnitDefNames["turretlaser"] --LLT
+defender=UnitDefNames["turretmissile"] --Defender
+hlt=UnitDefNames["turretheavylaser"] --HLT
+gauss=UnitDefNames["turretgauss"] --gauss
+faraday=UnitDefNames["turretemp"] --faraday
+newton=UnitDefNames["turretimpulse"] --newton
+stardust=UnitDefNames["turretriot"] --stardust
+ddm=UnitDefNames["turretheavy"] --DDM
+anni=UnitDefNames["turretantiheavy"] --Annihilator
+razor=UnitDefNames["turretaalaser"] --Razor AA
+cobra=UnitDefNames["turretaaflak"] -- Cobra AA
+screamer=UnitDefNames["turretaaheavy"] --Screamer AA
+chainsaw=UnitDefNames["turretaafar"] --Chainsaw
 
 urchin=UnitDefNames["turrettorp"] --Urchin
 
-behemoth=UnitDefNames["corbhmth"] --Behemoth
-silo=UnitDefNames["missilesilo"] --Missile Silo
-silencer=UnitDefNames["corsilo"] --Nuclear Missile Silo
-protector=UnitDefNames["armamd"] --Protector
+behemoth=UnitDefNames["staticarty"] --Behemoth
+silo=UnitDefNames["staticmissilesilo"] --Missile Silo
+silencer=UnitDefNames["staticnuke"] --Nuclear Missile Silo
+protector=UnitDefNames["staticantinuke"] --Protector
 
-advRadar=UnitDefNames["armarad"] --Advanced Radar Tower
-sonar=UnitDefNames["armsonar"] --Sonar
-aegis=UnitDefNames["corjamt"] --Aegis (static shield)
+advRadar=UnitDefNames["staticheavyradar"] --Advanced Radar Tower
+sonar=UnitDefNames["staticsonar"] --Sonar
+aegis=UnitDefNames["staticshield"] --Aegis (static shield)
 
 gsfac=UnitDefNames["factorygunship"] --Gunship factory
 airfac=UnitDefNames["factoryplane"] --Airplane factory
