@@ -18,6 +18,7 @@ end
 local screenx, screeny
 
 local function ToggleIdleOne(uId)
+	Spring.Echo("ToggleIdleOne")
 	local commandQueueTable=spGetCommandQueue(uId)
 	--if not(commandQueueTable) or #commandQueueTable==0 then
 	--Echo("#commandQueueTable"..#commandQueueTable)
@@ -42,7 +43,7 @@ function widget:Initialize()
 		return
 	end
 
-	screenx, screeny = widgetHandler:GetViewSizes()	
+	screenx, screeny = widgetHandler:GetViewSizes()
 	ToggleIdle()
 end
 
@@ -51,9 +52,11 @@ local idleList={}
 function widget:UnitIdle(unitID, unitDefID, unitTeam)
 	if unitTeam == myTeamId then
 		local units=FilterMobileConstructors({unitID})
-		if #units==1 then
+		local _, _, _, _, built = Spring.GetUnitHealth(unitID)
+		if #units == 1 and built == 1.0 then
 			local gameFrame = spGetGameFrame()
-			idleList[unitID]=gameFrame
+			idleList[unitID] = {}
+			idleList[unitID].gameFrame = gameFrame
 			--local x, _, z = spGetUnitPosition(unitID)
 			--spMarkerAddPoint(x, 0, z, "", true)
 		end
@@ -80,7 +83,7 @@ local idleCancelCommands={
 	[CMD_MORPH]=true,
 	[CMD_JUMP]=true,
 	[CMD_ONECLICK_WEAPON]=true,
-	--to be extended	
+	--to be extended
 }
 ]]--
 
@@ -96,14 +99,27 @@ local stateCommands = {	-- FIXME: is there a better way of doing this?
 	[CMD.AUTOREPAIRLEVEL] = true,
 	[CMD.LOOPBACKATTACK] = true,
 	[CMD.SET_WANTED_MAX_SPEED] = true,
-	[CMD_PRIORITY] = true
+	[CMD_PRIORITY] = true,
+	[CMD_MORPH] = true,
 }
 
 function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOptions)
-	--if idleList[unitID] and	(cmdID<0 or idleCancelCommands[cmdID]) then		
-	if idleList[unitID] and	(cmdID<0 or stateCommands[cmdID]==nil) then		
+	--if idleList[unitID] and	(cmdID<0 or idleCancelCommands[cmdID]) then
+	if idleList[unitID] and	(cmdID<0 or stateCommands[cmdID]==nil) then
 		idleList[unitID]=nil
 	end
+end
+
+function widget:UnitCmdDone(unitID, unitDefID, unitTeam, cmdID, cmdParams, cmdOpts, cmdTag)
+	ToggleIdleOne(unitID)
+end
+
+function widget:UnitCreated(unitID, unitDefID, unitTeam)
+	ToggleIdleOne(unitID)
+end
+
+function widget:UnitFinished(unitID, unitDefID, unitTeam)
+	ToggleIdleOne(unitID)
 end
 
 function widget:UnitGiven(unitID, unitDefID, newTeam, oldTeam)
@@ -111,13 +127,13 @@ function widget:UnitGiven(unitID, unitDefID, newTeam, oldTeam)
 end
 
 function widget:UnitTaken(unitID, unitDefID, oldTeam, newTeam)
-	if idleList[unitID] then		
+	if idleList[unitID] then
 		idleList[unitID]=nil
 	end
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam, attackerID, attackerDefID, attackerTeam)
-	if idleList[unitID] then		
+	if idleList[unitID] then
 		idleList[unitID]=nil
 	end
 end
@@ -128,19 +144,19 @@ local gracePeriod=30*30 --first 30 seconds of the game
 local magicNumber = 10000
 local function CheckAndSetFlashMetalExcess(frame)
 	if frame<gracePeriod then return end
-	
+
 	local mCurr, mStor, mPull, mInco, mExpe, mShar, mSent, mReci = spGetTeamResources(myTeamId, "metal")
-	
+
 	mStor = mStor - magicNumber
 	--ePrintEx({ mCurr=mCurr, mStor=mStor, mPull=mPull, mInco=mInco, mExpe=mExpe, mShar=mShar, mSent=mSent, mReci=mReci})
-	
+
 	local mStorageLeft=mStor-mCurr
 	if mStorageLeft<0 then mStorageLeft=0 end
-	
+
 	local mProfit=mInco-mExpe+mReci-mSent
-	
+
 	--Echo("mProfit.."..mProfit)
-	
+
 	if mProfit<0 then
 		flashMetalExcess=false
 		return
@@ -148,8 +164,8 @@ local function CheckAndSetFlashMetalExcess(frame)
 		--flash metal excess if metal will overflow in 10 seconds
 		flashMetalExcess=mStorageLeft/mProfit<=10
 	end
-	
-	
+
+
 	--flashMetalExcess=mCurr >= mStor * 0.8
 end
 
@@ -160,24 +176,41 @@ local waitIdlePeriod=2*30 --x times second(s)
 function widget:GameFrame(frame)
 	if frame%checkFrequency==checkFrequencyBias then
 		flashIdleWorkers=false
-		for uId, storedFrame in pairs(idleList) do			
+		for uId, info in pairs(idleList) do
 			--Echo("UnitID.."..uId.."storedFrame.."..storedFrame)
-			if storedFrame and frame>=storedFrame+waitIdlePeriod then
+			if info and info.gameFrame and frame >= info.gameFrame + waitIdlePeriod then
+				idleList[uId].flash = true
 				flashIdleWorkers=true
-				--Echo("flashIdleWorkers")				
-				break
+				--Echo("flashIdleWorkers")
+			else
+				idleList[uId].flash = false
 			end
 		end
 		CheckAndSetFlashMetalExcess(frame)
 	end
 end
 
+local color
+function widget:Update(dt)
+	for uId, info in pairs(idleList) do
+		if info and info.flash then
+			info.x, info.y, info.z = Spring.GetUnitPosition(uId)
+			idleList[uId] = info
+		end
+	end
+	local frame=spGetGameFrame()
+	color = 0.5 + 0.5 * (frame % checkFrequency - checkFrequency)/(checkFrequency - 1)
+	if color < 0 then color = 0 end
+	if color > 1 then color = 1 end
+
+end
+
 function widget:ViewResize(viewSizeX, viewSizeY)
-	screenx, screeny = widgetHandler:GetViewSizes()	
+	screenx, screeny = widgetHandler:GetViewSizes()
 end
 
 local function DrawBigFlashingRect()
-	gl.Translate(0, 0, 0)		
+	gl.Translate(0, 0, 0)
 --	gl.LineWidth(2)
 	gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 	gl.Scale(1, 1, 1)
@@ -185,43 +218,51 @@ local function DrawBigFlashingRect()
 end
 
 function widget:DrawScreen()
-	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end	
+	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end
 
 	--rgba
 	if flashMetalExcess or flashIdleWorkers then
-		gl.PushMatrix()
-		
-		local frame=spGetGameFrame()
-		local color=0.5+0.5*(frame%checkFrequency - checkFrequency)/(checkFrequency-1)
-		if color<0 then color=0 end
-		if color>1 then color=1 end
-		--Echo("red="..red)
-		--local red=0.5
-		
 		--rgba
+		gl.PushMatrix()
 		gl.Color(color, 0, 0, 0.2)
-		DrawBigFlashingRect()	
-		
-		
+		DrawBigFlashingRect()
+		gl.PopMatrix()
+
 		if flashMetalExcess then
-			gl.PushMatrix()			
-			gl.Color(color, 0, 0, 0.8)		
+			gl.PushMatrix()
+			gl.Color(color, 0, 0, 0.8)
 			gl.Translate(screenx/2, 2*screeny/3, 0)
-			gl.Scale(1, 0.5, 1)	
+			gl.Scale(1, 0.5, 1)
 			gl.Text("Metal Excess", 0, 0, 100, "cv")
 			gl.PopMatrix()
-		end			
-		
+		end
+
 		if flashIdleWorkers then
-			gl.PushMatrix()			
-			gl.Color(color, color, 0, 0.8)		
+			gl.PushMatrix()
+			gl.Color(color, color, 0, 0.8)
 			gl.Translate(screenx/2, 2*screeny/3-50, 0)
-			gl.Scale(1, 0.5, 1)			
+			gl.Scale(1, 0.5, 1)
 			gl.Text("Idle Workers", 0, 0, 100, "cv")
 			gl.PopMatrix()
 		end
-		
-		
-		gl.PopMatrix()
+	end
+end
+
+function widget:DrawWorld()
+	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end
+	if flashIdleWorkers then
+		for uId, info in pairs(idleList) do
+			if info and info.flash then
+				--ePrintEx({uId=uId, info=info})
+				gl.PushMatrix()
+				gl.Scale(1, 1, 1)
+				--gl.LineStipple(true)
+				gl.LineWidth(9 + color * 9)
+				gl.Color(color, color, 0, 1)
+				gl.DrawGroundCircle(info.x, info.y, info.z, 20 + color * 20, 40)
+				gl.Color(1, 1, 1, 1)
+				gl.PopMatrix()
+			end
+		end
 	end
 end

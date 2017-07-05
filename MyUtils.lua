@@ -185,7 +185,7 @@ end
 
 
 --------------------Common vars----------------------
-zkConstructors = {armrectr=true, cornecro=true, corned=true, corch=true, armca=true, arm_spider=true, corfast=true, coracv=true, amphcon=true, shipcon=true} --conjurer, convict, mason, quill, crane, weaver, freaker, welder, conch, mariner
+zkConstructors = {cloakcon=true, shieldcon=true, vehcon=true, hovercon=true, planecon=true, gunshipcon=true, spidercon=true, jumpcon=true, tankcon=true, amphcon=true, shipcon=true} --conjurer, convict, mason, quill, crane, weaver, freaker, welder, conch, mariner
 
 -------------------Graph stuff-------------------
 

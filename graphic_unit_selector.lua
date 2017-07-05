@@ -53,7 +53,7 @@ local keysAux={
 	plus = KEYSYMS.KP6,
 	minus = KEYSYMS.KP4,
 }
- 
+
 local triggerKeys = {
 	[keysByClass.raider] = true,
 	[keysByClass.skirm] = true,
@@ -109,7 +109,7 @@ local unitTypes = {
 	},
 	riot = {
 		bomberriot = true,
-		amphimpulse = true,	
+		amphimpulse = true,
 		cloakriot = true,
 		shieldriot = true,
 		spiderriot = true,
@@ -162,17 +162,17 @@ local unitTypes = {
 		shieldscout = true,
 		cloakheavyraid = true,
 		cloaksnipe = true,
-		vehcapture = true,		
-		gunshipemp = true,		
+		vehcapture = true,
+		gunshipemp = true,
 		hoverdepthcharge = true,
-		spiderantiheavy = true,		
+		spiderantiheavy = true,
 		spherecloaker = true,
 		shieldshield = true,
 		cloakjammer = true,
 		planescout = true,
 	},
 	special2 = {
-		gunshiptrans = true,		
+		gunshiptrans = true,
 		shieldbomb = true,
 		cloakbomb = true,
 		gunshipbomb = true,
@@ -226,12 +226,12 @@ function widget:Initialize()
 end
 
 function widget:GameOver(winningAllyTeams)
-	--GameOver is irreversable with cheats, thus removing	
-	widgetHandler:RemoveWidget() 
+	--GameOver is irreversable with cheats, thus removing
+	widgetHandler:RemoveWidget()
 end
 
 local unloaded = false
-local function CheckIfSpectator()	
+local function CheckIfSpectator()
 	--spectator state is reversable with cheats
 	if Spring.GetSpectatingState() then
 		widgetHandler:RemoveCallIn("KeyPress")
@@ -251,7 +251,7 @@ local function CheckIfSpectator()
 end
 
 local myTeamID = Spring.GetMyTeamID()
-function widget:TeamChanged(teamID)	
+function widget:TeamChanged(teamID)
 	CheckIfSpectator()
 	myTeamID = Spring.GetMyTeamID()
 end
@@ -289,25 +289,25 @@ local ontype = "none"
 
 local keyPressedTime = 0
 function widget:KeyPress(key, mods, isRepeat)
-	if triggerKeysAux[key] then	
+	if triggerKeysAux[key] then
 		if key == keysAux.plus then
-			rad = math.min(3000, rad+100)			
+			rad = math.min(3000, rad+100)
 		end
 
 		if key == keysAux.minus then
-			rad = math.max(100, rad-100)			
-		end		
+			rad = math.max(100, rad-100)
+		end
 	end
 
-	if triggerKeys[key] then	
+	if triggerKeys[key] then
 		if keyPressedTime == 0 then
 			keyPressedTime = Spring.GetTimer()
-		end		
-		
-		local timeOk = Spring.DiffTimers(Spring.GetTimer(), keyPressedTime) >= keyHoldTime		
+		end
+
+		local timeOk = Spring.DiffTimers(Spring.GetTimer(), keyPressedTime) >= keyHoldTime
 		if timeOk then
 			on = true
-			ontype = tostring(classByKeys[key])			
+			ontype = tostring(classByKeys[key])
 		end
 	end
 end
@@ -330,17 +330,17 @@ local unitsPos
 function widget:Update()
 	if on then
 		local mouseX, mouseY = Spring.GetMouseState()
-		local desc, pos = Spring.TraceScreenRay(mouseX, mouseY, true)	
+		local desc, pos = Spring.TraceScreenRay(mouseX, mouseY, true)
 		if desc ~= nil then
 			x, y, z = pos[1], pos[2], pos[3]
-			
+
 			selection = {}
 			for _, uID in ipairs(Spring.GetUnitsInCylinder(x, z, rad, myTeamID)) do
 				if unitTypes[ontype][UnitDefs[Spring.GetUnitDefID(uID)].name] then
 					selection[#selection + 1] = uID
 				end
 			end
-			
+
 			unitsPos = {}
 			for _, uID in ipairs(selection) do
 				if Spring.ValidUnitID(uID) then
@@ -359,7 +359,7 @@ function widget:Update()
 end
 
 function widget:DrawWorld() -- this is used for openGL stuff.
-	if on and x then	
+	if on and x then
 		gl.PushMatrix() --This is the start of an openGL function.
 		gl.LineStipple(true)
 		gl.LineWidth(2.0)
@@ -372,7 +372,7 @@ function widget:DrawWorld() -- this is used for openGL stuff.
 		gl.LineWidth(1.0)
 		gl.LineStipple(false)
 		gl.PopMatrix() -- end of function. Have to use this with after a push!
-		
+
 
 		for _, uID in ipairs(selection) do
 			gl.PushMatrix()
@@ -382,6 +382,6 @@ function widget:DrawWorld() -- this is used for openGL stuff.
 			gl.Color(1, 1, 1, 1)
 			gl.PopMatrix()
 		end
-		
+
 	end
 end
