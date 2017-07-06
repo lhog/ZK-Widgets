@@ -40,72 +40,8 @@ local function ToggleIdle()
 	end
 end
 
-local vertShaderCircle = [[
-	#version 120
-	void main()
-	{
-	  gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-	  gl_TexCoord[0] = gl_MultiTexCoord0;
-	}
-]]
-
-local fragShaderCircleTest = [[
-	uniform sampler2D tex0;
-
-	uniform float border; // 0.01
-	uniform float circle_radius; // 0.5
-
-	uniform vec4 circle_color; // vec4(1.0, 1.0, 1.0, 1.0)
-
-	const vec2 circle_center = vec2(0.5, 0.5);
-
-	void main (void)
-	{
-		vec2 uv = gl_TexCoord[0].xy;
-		uv -= circle_center;
-
-		gl_FragColor = circle_color / length(circle_center - uv);
-	}
-]]
-
-local fragShaderCircle = [[
-	#version 120
-	uniform sampler2D tex0;
-
-	uniform float border; // 0.01
-	uniform float circle_radius; // 0.5
-
-	uniform vec4 circle_color; // vec4(1.0, 1.0, 1.0, 1.0)
-
-	const vec2 circle_center = vec2(0.5, 0.5);
-
-	void main (void)
-	{
-		vec2 uv = gl_TexCoord[0].xy;
-
-		vec4 bkg_color = vec4(0.0, 0.0, 0.0, 0.0);
-
-		// Offset uv with the center of the circle.
-		uv -= circle_center;
-
-		float dist =  sqrt(dot(uv, uv));
-
-		float t = 1.0 + smoothstep(circle_radius, circle_radius + border, dist)
-					- smoothstep(circle_radius - border, circle_radius, dist);
-		t = 1.0 - step(circle_radius - border, dist) * (1.0 - step(circle_radius + border, dist));
-
-
-		//gl_FragColor = mix(circle_color, bkg_color, t);
-		gl_FragColor = (1.0-t) * circle_color;
-	}
-]]
-
-local circleShader
-local circleShader__border
-local circleShader__circle_radius
-local circleShader__circle_color
-
-local WARNING_IMAGE = LUAUI_DIRNAME .. "Images/Crystal_Clear_app_error.png"
+--local WARNING_IMAGE = LUAUI_DIRNAME .. "Images/Crystal_Clear_app_error.png"
+local WARNING_IMAGE = LUAUI_DIRNAME .. 'Images/idlecon.png'
 
 function widget:Initialize()
 	CheckSpecState(widgetName)
@@ -120,31 +56,11 @@ function widget:Initialize()
 
 	screenx, screeny = widgetHandler:GetViewSizes()
 
-	circleShader = gl.CreateShader({
-		--vertex = vertShaderCircle,
-		fragment = fragShaderCircle,
-		uniformInt = {tex0 = 0},
---		uniform = {border = 1, circle_radius = 2, circle_color = 3},
-	})
-
-	if circleShader == nil then
-		Spring.Log(widget:GetInfo().name, LOG.ERROR, "circleShader: shader error: "..gl.GetShaderLog())
-	end
-
-	circleShader__border = gl.GetUniformLocation(circleShader, 'border')
-	circleShader__circle_radius = gl.GetUniformLocation(circleShader, 'circle_radius')
-	circleShader__circle_color = gl.GetUniformLocation(circleShader, 'circle_color')
-
 	ToggleIdle()
 end
 
 function widget:Shutdown()
-	if circleShader then
-		circleShader__border = nil
-		circleShader__circle_radius = nil
-		circleShader__circle_color = nil
-		gl.DeleteShader(circleShader)
-	end
+
 end
 
 function widget:TeamChanged(teamID)
@@ -190,13 +106,8 @@ function widget:UnitIdle(unitID, unitDefID, unitTeam)
 			factor = factor * (tonumber(uDef.customParams.selection_scale) or 1)
 
 			--idleList[unitID].radius = dims.radius
-			--idleList[unitID].radius = dims.radius
 			--idleList[unitID].radius = math.round( math.sqrt( uDef.zsize^2 + uDef.xsize^2 ) ) * factor
 			idleList[unitID].radius = math.sqrt( 2 * math.max( uDef.zsize, uDef.xsize ) ^ 2 ) * factor
-
-			--Spring.Echo("radius="..idleList[unitID].radius)
-			--local x, _, z = spGetUnitPosition(unitID)
-			--spMarkerAddPoint(x, 0, z, "", true)
 		end
 	end
 end
@@ -225,21 +136,38 @@ local idleCancelCommands={
 }
 ]]--
 
-local stateCommands = {	-- FIXME: is there a better way of doing this?
-	[CMD_WANT_CLOAK] = true,	-- this is the only one that's really needed, since it can occur without user input (when a temporarily decloaked unit recloaks)
+local stateCommands = {
+	[CMD.ONOFF] = true,
 	[CMD.FIRE_STATE] = true,
 	[CMD.MOVE_STATE] = true,
-	[CMD.CLOAK] = true,
-	[CMD.ONOFF] = true,
 	[CMD.REPEAT] = true,
+	[CMD.CLOAK] = true,
+	[CMD.STOCKPILE] = true,
 	[CMD.TRAJECTORY] = true,
 	[CMD.IDLEMODE] = true,
-	[CMD.AUTOREPAIRLEVEL] = true,
-	[CMD.LOOPBACKATTACK] = true,
-	[CMD.SET_WANTED_MAX_SPEED] = true,
+	[CMD_GLOBAL_BUILD] = true,
+	[CMD_STEALTH] = true,
+	[CMD_CLOAK_SHIELD] = true,
+	[CMD_UNIT_FLOAT_STATE] = true,
 	[CMD_PRIORITY] = true,
-	[CMD_MORPH] = true,
-	[CMD.WAIT] = true,
+	[CMD_MISC_PRIORITY] = true,
+	[CMD_RETREAT] = true,
+	[CMD_UNIT_BOMBER_DIVE_STATE] = true,
+	[CMD_AP_FLY_STATE] = true,
+	[CMD_AP_AUTOREPAIRLEVEL] = true,
+	[CMD_UNIT_SET_TARGET] = true,
+	[CMD_UNIT_CANCEL_TARGET] = true,
+	[CMD_UNIT_SET_TARGET_CIRCLE] = true,
+	[CMD_ABANDON_PW] = true,
+	[CMD_RECALL_DRONES] = true,
+	[CMD_UNIT_KILL_SUBORDINATES] = true,
+	[CMD_UNIT_AI] = true,
+	[CMD_WANT_CLOAK] = true,
+	[CMD_DONT_FIRE_AT_RADAR] = true,
+	[CMD_AIR_STRAFE] = true,
+	[CMD_PREVENT_OVERKILL] = true,
+	[CMD_SELECTION_RANK] = true,
+	[CMD.SET_WANTED_MAX_SPEED] = true,
 }
 
 function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOptions)
@@ -287,25 +215,18 @@ local function CheckAndSetFlashMetalExcess(frame)
 	local mCurr, mStor, mPull, mInco, mExpe, mShar, mSent, mReci = spGetTeamResources(myTeamID, "metal")
 
 	mStor = mStor - magicNumber
-	--ePrintEx({ mCurr=mCurr, mStor=mStor, mPull=mPull, mInco=mInco, mExpe=mExpe, mShar=mShar, mSent=mSent, mReci=mReci})
 
 	local mStorageLeft=mStor-mCurr
 	if mStorageLeft<0 then mStorageLeft=0 end
 
 	local mProfit=mInco-mExpe+mReci-mSent
 
-	--Echo("mProfit.."..mProfit)
-
 	if mProfit<0 then
 		flashMetalExcess=false
 		return
 	else
-		--flash metal excess if metal will overflow in 10 seconds
 		flashMetalExcess=mStorageLeft/mProfit<=10
 	end
-
-
-	--flashMetalExcess=mCurr >= mStor * 0.8
 end
 
 local checkFrequency=30
@@ -331,7 +252,6 @@ end
 
 local color
 
---[[
 function widget:Update(dt)
 	local cx, cy, cz = Spring.GetCameraPosition()
 
@@ -347,16 +267,17 @@ function widget:Update(dt)
 				local h = Spring.GetGroundHeight(x, z)
 				y = math.max(y, h)
 				local cameraDist = math.min( 8000, math.sqrt( (cx-x)^2 + (cy-y)^2 + (cz-z)^2 ) )
-				--local scale = math.sqrt((cameraDist / 600)) --number is an "optimal" view distance
+
+				local scale = math.sqrt((cameraDist / 600)) --number is an "optimal" view distance
 				--scale = math.min(scale, 2.5) --stop keeping icon size unchanged if zoomed out farther than "optimal" view distance
-				local scale = 0.4 * math.sqrt(cameraDist)
+
 
 				local iconInfo = iconTypes[UnitDefs[info.udid].iconType]
 
 				if iconInfo.radiusadjust then
 					scale = scale * Spring.GetUnitRadius(uId) / 30.0
 				end
-				y = math.max(y, h + 3*scale)
+				y = math.max(y, h + scale)
 				--y = y + Spring.GetUnitHeight(uId)
 				info.iconSize = iconInfo.size
 				info.scale = scale
@@ -364,10 +285,6 @@ function widget:Update(dt)
 
 			info.x, info.y, info.z = x, y, z
 			info.h = Spring.GetUnitHeight(uId)
-
-
-
-			--Spring.Echo(info.iconSize)
 
 			idleList[uId] = info
 		end
@@ -378,8 +295,10 @@ function widget:Update(dt)
 	if color < 0 then color = 0 end
 	if color > 1 then color = 1 end
 end
-]]--
 
+
+
+--[[
 function widget:Update(dt)
 	for uId, info in pairs(idleList) do
 		if info and info.flash then
@@ -404,6 +323,7 @@ function widget:Update(dt)
 	if color < 0 then color = 0 end
 	if color > 1 then color = 1 end
 end
+]]--
 
 
 function widget:ViewResize(viewSizeX, viewSizeY)
@@ -449,30 +369,33 @@ function widget:DrawScreen()
 	end
 end
 
+
 function widget:DrawWorld()
 	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end
 	for uId, info in pairs(idleList) do
 		if info then
 			if info.flash then
 				gl.PushMatrix()
-
-	--[[
+--[[
 				gl.LineWidth(9 / info.scale + color * 6 / info.scale)
 				gl.Color(color, color, 0, 1)
 				gl.DrawGroundCircle(info.x, 0, info.z, info.radius + color * 16, 32)
 				--gl.DrawGroundCircle(info.x, 0, info.z, info.radius, 32)
 				gl.Color(1, 1, 1, 1)
-
-
-	]]--
+]]--
 				if info.isIcon then
-					--gl.Color(color, color, 0, 1)
-					WG.icons.SetOrder('idle', 6)
-					--WG.icons.SetUnitIcon(uId, {name='idle', texture=WARNING_IMAGE, color={1, 1, 1, color}})
-					WG.icons.SetUnitIcon(uId, {name='idle', texture=WARNING_IMAGE})
-					WG.icons.SetPulse( 'idle', true )
+					--gl.Blending(GL.ONE, GL.Z)
+					gl.Translate(info.x, info.y, info.z)
+					gl.Billboard()
+					--gl.Rotate(270, 1, 0, 0)
+					gl.Translate(0, 12 * info.iconSize * info.scale, 0)
+
+					gl.Color(color, color, 0, 1)
+					gl.Texture(WARNING_IMAGE)
+					local iconSideSize = info.iconSize * info.scale * 6
+					gl.TexRect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
+					gl.Texture(false)
 				else
-					WG.icons.SetUnitIcon(uId, {name='idle', texture=nil})
 					gl.Blending(GL.ONE, GL.ONE)
 					gl.DepthTest(GL.LEQUAL)
 					gl.PolygonOffset(-10, -10)
@@ -481,33 +404,9 @@ function widget:DrawWorld()
 					gl.Unit(uId, true)
 				end
 
-	--[[
-				local texSide = info.radius + 18
-				gl.Translate(info.x, info.y, info.z)
-				gl.Rotate(90, 1, 0, 0)
-
-				gl.DepthTest(false)
-
-				--gl.Blending(false)
-
-				gl.UseShader(circleShader)
-
-				gl.Uniform(circleShader__border,  0.1 + color * 0.05)
-				gl.Uniform(circleShader__circle_radius,  0.4 + color * 0.05)
-				gl.Uniform(circleShader__circle_color, color, color, 0.0, 1.0)
-
-				--gl.Rect(-info.radius, -info.radius, info.radius, info.radius)
-				gl.TexRect(-texSide, -texSide, texSide, texSide)
-
-				gl.UseShader(0)
-
-				--gl.Blending(true)
-				gl.DepthTest(true)
-
-	]]--
 				gl.PopMatrix()
 			else
-				WG.icons.SetUnitIcon(uId, {name='idle', texture=nil})
+				----
 			end
 
 		end
