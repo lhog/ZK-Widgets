@@ -130,12 +130,12 @@ function ePrint (tbl, indent)
 	if not indent then indent = 0 end
 	for k, v in pairs(tbl) do
 		formatting = string.rep(" ", indent) .. k .. ": "
-		
+
 		if type(v) == "table" then
 			Echo(formatting)
 			ePrint(v, indent+1)
 		else
-			if type(v) == "boolean" or type(v) == "function" then			
+			if type(v) == "boolean" or type(v) == "function" then
 				Echo(formatting .. tostring(v))
 			else
 				Echo(formatting .. v)
@@ -147,7 +147,7 @@ end
 function ePrintEx (val, indent)
 	if val==nil then Echo("nil")
 	else
-		if type(val) == "table" then ePrint (val, indent)			
+		if type(val) == "table" then ePrint (val, indent)
 		else
 			Echo(tostring(val))
 		end
@@ -165,7 +165,7 @@ function ePrintCMD(cmd)
 		Echo( "id: "..(CMD[cmd.id] or tostring(cmd.id)) )
 	else
 		Echo( "id: BUILD "..UnitDefs[-cmd.id].name )
-	end	
+	end
 	if cmd.tag then Echo("tag: "..cmd.tag) end
 	ePrintEx({params=cmd.params})
 	ePrintEx({options=cmd.options})
@@ -193,23 +193,23 @@ function MinimumSpanningTreeFromPoints(points)
 	local reached={}
 	local unreached={}
 	local MST={}
-	
+
 	local nPoints=#points
-	
-	if nPoints>1 then	
+
+	if nPoints>1 then
 		reached[1]=true
-		
+
 		for i=2, nPoints do
 			unreached[i]=true
 		end
-		
+
 		local unreachedCnt=nPoints-1
-		
+
 		while unreachedCnt>0 do
 			local minDist=math.huge
 			local ix=nil
 			local jx=nil
-			
+
 			for i=1, nPoints do
 				if reached[i] then
 					for j=1, nPoints do
@@ -224,14 +224,14 @@ function MinimumSpanningTreeFromPoints(points)
 					end
 				end
 			end
-			
+
 			if ix and jx then
 				reached[jx]=true
 				unreached[jx]=nil
 				unreachedCnt=unreachedCnt-1
 				table.insert(MST, {ix, jx})
-			end			
-		end		
+			end
+		end
 		return MST
 	elseif nPoints==1 then
 		return {}
@@ -255,16 +255,16 @@ function GetLineABC(x1,x2,z1,z2)
 	local A = (z1-z2)
 	local B = (x2-x1)
 	local C = (x1*z2-x2*z1)
-	
+
 	return A,B,C
 end
 
 function GetCoordOnLine(A, B, C, x0, z0, d)
-	
+
 	local sign
 	if C<0 then sign=-1 else sign=1 end
-	
-	
+
+
 	local lineAngle=math.atan2(-A,B)
 
 	local x=x0+math.cos(lineAngle)*d
@@ -283,7 +283,7 @@ local function NextFunctionFull(myPath, x0, z0, x, z)
 		ix, iy, iz=myPath:Next(ix, iy, iz)
 		local finished=((ix==x) and (iz==z)) or (ix==-1)
 		return finished, ix, iy, iz
-    end	
+    end
 end
 
 local function NextFunctionLite(myPath, x0, z0, x, z)
@@ -298,24 +298,24 @@ local function NextFunctionLite(myPath, x0, z0, x, z)
 		if iter<=wpPatherCnt then
 			ix, iy, iz=wpPather[iter][1], wpPather[iter][2], wpPather[iter][3]
 			iter=iter+1
-		end						
+		end
 		--ePrintEx({x=ix, y=iy, z=iz, f=finished})
 		--Echo("")
 		return finished, ix, iy, iz
-    end	
+    end
 end
 
 local function GetETALine(wp1, wp2, moveDef, unitDefSpeed)
 	local deltaY=wp2.y-wp1.y
-	
-	local deltaXZ=math.sqrt((wp2.x-wp1.x)^2 + (wp2.z-wp1.z)^2) --sqrt(dx^2+dz^2)		
+
+	local deltaXZ=math.sqrt((wp2.x-wp1.x)^2 + (wp2.z-wp1.z)^2) --sqrt(dx^2+dz^2)
 	local deltaP=math.sqrt(deltaXZ^2+deltaY^2)
-	
+
 	local slopeValue=1.0-deltaXZ/deltaP
-	
+
 	local speedMod
 	if deltaY>0 then speedMod = 1.0 / (1.0 + slopeValue * moveDef.slopeMod) else speedMod = 1.0 end
-	
+
 	local ttime=deltaP/(unitDefSpeed*speedMod)
 	return ttime
 end
@@ -325,34 +325,34 @@ function ETA2ArriveImpl(unitId, x, z, nextFunctionProducer)
 	local unitDefId=spGetUnitDefID(unitId)
 	local unitDefSpeed=UnitDefs[unitDefId].speed
 	local moveDef = UnitDefs[unitDefId].moveDef
-	
+
 	local y = spGetGroundHeight(x, z)
 	local x0, y0, z0 = spGetUnitPosition(unitId)
-	
+
 	local myPath=nil
-	
+
 	local myPath = nil
-	
+
 	local radius = 32
-	if moveDef.id~=nil then		
-		myPath = Spring.RequestPath(moveDef.id, x0, y0, z0, x, y, z, radius) --16?		
+	if moveDef.id~=nil then
+		myPath = Spring.RequestPath(moveDef.id, x0, y0, z0, x, y, z, radius) --16?
 	end
-	
+
 	--ePrintEx({myPath=myPath})
 
 	if myPath then
 		--spMarkerAddPoint(x, y, z, "!")
 		local wpPather, idxes = myPath:GetPathWayPoints()
 		--ePrintEx({wpPather=wpPather, idxes=idxes})
-		
+
 		local wp1={x=x0, y=y0, z=z0}
 		local wp2
-		
+
 		local ttime=0
 		local wpEntries=0
 		local myNextFunction=nextFunctionProducer(myPath, x0, z0, x, z)
 		local fin=false
-		
+
 		while (wpEntries<500) and (not fin) do
 			local ix, iy, iz
 			--Echo("wpEntries="..wpEntries)
@@ -360,25 +360,25 @@ function ETA2ArriveImpl(unitId, x, z, nextFunctionProducer)
 			fin, ix, iy, iz = myNextFunction()
 			--Echo("finished_after="..tostring(fin))
 			--ePrintEx({f=fin, x=ix, y=iy, z=iz})
-			
+
 			if (ix==-1 and iz==-1) then return math.huge end --unreachable
 			if (ix==nil and iz==nil) then break end --path doesn't have entries, presumably endpoint is nearby
 			wp2={x=ix, y=iy, z=iz}
-			
+
 			--ePrintEx{{wp1=wp1, wp2=wp2}}
 
 			--spMarkerAddLine( wp1.x, wp1.y, wp1.z, wp2.x, wp2.y, wp2.z )
 			--spMarkerAddLine( wp1.x, 0, wp1.z, wp2.x, 0, wp2.z )
- 			
+
 			wpEntries=wpEntries+1
 
 			ttime=ttime+GetETALine(wp1, wp2, moveDef, unitDefSpeed)
 			wp1=wp2
 		end
-		
+
 		wp2={x=x, y=y, z=z}
 		--spMarkerAddLine( wp1.x, 0, wp1.z, wp2.x, 0, wp2.z )
-		
+
 		local D=math.sqrt(Dist2D2(wp1.x, wp2.x, wp1.z, wp2.z))
 		--ePrintEx({wp2=wp2})
 		--Echo("D="..D)
@@ -386,12 +386,12 @@ function ETA2ArriveImpl(unitId, x, z, nextFunctionProducer)
 		if D>radius+20 then --unreachable on last point
 			return math.huge
 		end
-		
+
 		ttime=ttime+GetETALine(wp1, wp2, moveDef, unitDefSpeed)
-		
+
 		--Spring.MarkerErasePosition(x, y, z)
 
-		return ttime		
+		return ttime
 	else --we are very close
 		ttime=math.sqrt(Dist2D2(x0,x,z0,z))/unitDefSpeed
 		return ttime
@@ -411,7 +411,6 @@ end
 --------------------Eco utils -----------------------
 myTeamId=spGetMyTeamID()
 gaiaTeamId = spGetGaiaTeamID()
-
 
 --------------------Construction Stuff---------------
 
@@ -458,20 +457,20 @@ local function IsBlockingUnitInCylinderEx(bx, bz, bw, bh, cylRadius, exceptions)
 	local maxCylRadius=cylRadius+2*GetBiggestUnitSize()+10 --just in case
 	local cylRadius2=cylRadius^2
 	local unitsInCyl=spGetUnitsInCylinder(bx, bz, maxCylRadius)
-	
+
 	local rect={{x=bx-bw, z=bz-bh},
 				{x=bx-bw, z=bz+bh},
 				{x=bx+bw, z=bz+bh},
 				{x=bx+bw, z=bz-bh}}
-	
+
 	for _, uId in pairs(unitsInCyl) do
 		local udId=spGetUnitDefID(uId)
 		if udId and IsBuildingbyUdID(udId) and (not exceptions[udId]) then
 			local facing=spGetUnitBuildFacing(uId)
 			local bx1, _, bz1 = spGetUnitPosition(uId)
 			local bw1, bh1 = GetBuildingDimensions(udId, facing)
-			
-			
+
+
 			local rect1={{x=bx1-bw1, z=bz1-bh1},
 						 {x=bx1-bw1, z=bz1+bh1},
 						 {x=bx1+bw1, z=bz1+bh1},
@@ -482,9 +481,9 @@ local function IsBlockingUnitInCylinderEx(bx, bz, bw, bh, cylRadius, exceptions)
 					if dist2d<cylRadius2 then
 						return true
 					end
-				end				
-			end	
-		end	
+				end
+			end
+		end
 	end
 	return false
 end
@@ -497,7 +496,7 @@ local function IsBlockingUnitInCylinder(x, z, cylRadius, exceptions)
 		if udId and IsBuildingbyUdID(udId) and (not exceptions[udId]) then --found a unit that cannot be moved except for exceptions
 			--Echo("Unit Name "..UnitDefs[udId].humanName)
 			return true
-		end		
+		end
 	end
 	--else
 	return false
@@ -506,92 +505,92 @@ end
 function GetSuitableBuildSiteDirectedMaximumDistant(unitDefID, x0, z0, xt, zt, desiredDistance, minDist, attempts, facing, coneAngle, exceptions)
 
 	if not(exceptions) then exceptions={} end
-	
+
 	local xs, zs=4*UnitDefs[unitDefID].xsize, 4*UnitDefs[unitDefID].zsize
 
 	local A, B, C=GetLineABC(x0, xt, z0, zt)
-	
+
 	local x, z=GetCoordOnLine(A, B, C, x0, z0, desiredDistance)
-	
+
 	local result
 	result=spTestBuildOrder(unitDefID, x, 0 ,z, facing)
-	
-	if (result>0) and not IsBlockingUnitInCylinderEx(x, z, xs, zs, minDist, exceptions) then		
+
+	if (result>0) and not IsBlockingUnitInCylinderEx(x, z, xs, zs, minDist, exceptions) then
 		return x, z
 	end
-	
+
 	x, z = nil
-	
-	local theta=math.atan2(-A,B)	
+
+	local theta=math.atan2(-A,B)
 	local minDist2d=math.huge
-	
+
 	if not coneAngle then coneAngle=90 end
-	
-	while attempts>=0 do		
+
+	while attempts>=0 do
 		local phi=math.random(-coneAngle, coneAngle)*math.pi/180
 		local R=math.random(desiredDistance)
-		
+
 		local xr=x0+R*math.cos(phi+theta)
 		local zr=z0+R*math.sin(phi+theta)
-		
+
 		local dist2d=Dist2D2(xr,xt,zr,zt)
-		
+
 		if dist2d<minDist2d then
 			result=spTestBuildOrder(unitDefID, xr, 0 ,zr, facing)
-			if (result>0) and not IsBlockingUnitInCylinderEx(xr, zr, xs, zs, minDist, exceptions) then		
-				--spMarkerAddPoint(xr, 0, zr, "", true)	
+			if (result>0) and not IsBlockingUnitInCylinderEx(xr, zr, xs, zs, minDist, exceptions) then
+				--spMarkerAddPoint(xr, 0, zr, "", true)
 				minDist2d=dist2d
 				x=xr
 				z=zr
-			end	
+			end
 		end
 		attempts=attempts-1
 	end
-	
+
 	return x, z
 end
 
 function GetSuitableBuildSite(builderUnitId, unitDefID, x0, z0, searchRadius, minDist, attempts, facing, exceptions)
-	
+
 	local x, z=x0, z0
-	
+
 	if not(exceptions) then exceptions={} end
-	
+
 	local xs, zs=4*UnitDefs[unitDefID].xsize, 4*UnitDefs[unitDefID].zsize
-	
+
 	local result
 	result=spTestBuildOrder(unitDefID, x, 0 ,z, facing)
-	
+
 	if (result>0) and not IsBlockingUnitInCylinderEx(x, z, xs, zs, minDist, exceptions) then
 		return x, z
 	end
-	
+
 	x, z = nil
-	
+
 	local minDist2d=math.huge
-	
-	while attempts>=0 do		
+
+	while attempts>=0 do
 		local phi=math.random(0, 360)*math.pi/180
 		local R=math.random(searchRadius)
-		
+
 		local xr=x0+R*math.cos(phi)
 		local zr=z0+R*math.sin(phi)
-		
+
 		local dist2d=Dist2D2(xr,x0,zr,z0)
-		
+
 		--if dist2d<minDist2d and dist2d>minDist^2 then
 		if dist2d<minDist2d then
 			result=spTestBuildOrder(unitDefID, xr, 0 ,zr, facing)
-			if (result>0) and not IsBlockingUnitInCylinderEx(xr, zr, xs, zs, minDist, exceptions) then		
-				--spMarkerAddPoint(xr, 0, zr, "", true)	
+			if (result>0) and not IsBlockingUnitInCylinderEx(xr, zr, xs, zs, minDist, exceptions) then
+				--spMarkerAddPoint(xr, 0, zr, "", true)
 				minDist2d=dist2d
 				x=xr
 				z=zr
-			end	
+			end
 		end
 		attempts=attempts-1
 	end
-	
+
 	return x, z
 end
 
@@ -679,7 +678,7 @@ function IsDisabled(uId)
 end
 
 function IsParalized(uId)
-	local health, maxHealth, paralyzeDamage, _, _ = spGetUnitHealth(uId) --paralyzeDamage>maxHealth		
+	local health, maxHealth, paralyzeDamage, _, _ = spGetUnitHealth(uId) --paralyzeDamage>maxHealth
 	if paralyzeOnMaxHealth then
 		return paralyzeDamage>maxHealth
 	else
@@ -705,7 +704,7 @@ end
 
 function IsCommanderByUDID(udId)
 	--if udId and UnitDefs[udId] and UnitDefs[udId].commander then
-	if udId and UnitDefs[udId] and UnitDefs[udId].customParams and UnitDefs[udId].customParams.commtype then	
+	if udId and UnitDefs[udId] and UnitDefs[udId].customParams and UnitDefs[udId].customParams.commtype then
 		return true
 	else
 		return false
@@ -717,13 +716,13 @@ function FilterConstructors(unitIds)
 	for _, uId in pairs(unitIds) do
 		if spValidUnitID(uId) then --we only work with valid units, TODO check if alive?
 			local uDefId=spGetUnitDefID(uId)
-			if zkConstructors[UnitDefs[uDefId].name] or uDefId==caretaker.id or IsCommanderByUDID(uDefId) then			
+			if zkConstructors[UnitDefs[uDefId].name] or uDefId==caretaker.id or IsCommanderByUDID(uDefId) then
 				table.insert(conses, uId)
 			end
 		end
 	end
-	
-	return conses	
+
+	return conses
 end
 
 function FilterMobileConstructors(unitIds)
@@ -731,18 +730,18 @@ function FilterMobileConstructors(unitIds)
 	for _, uId in pairs(unitIds) do
 		if spValidUnitID(uId) then --we only work with valid units, TODO check if alive?
 			local uDefId=spGetUnitDefID(uId)
-			if zkConstructors[UnitDefs[uDefId].name] or IsCommanderByUDID(uDefId) then			
+			if zkConstructors[UnitDefs[uDefId].name] or IsCommanderByUDID(uDefId) then
 				table.insert(mobileConses, uId)
 			end
 		end
 	end
-	
+
 	return mobileConses
 end
 
 function PriorityToNumber(priority)
 	local prioNum
-	priority=string.lower(priority or "")	
+	priority=string.lower(priority or "")
 	if 	priority=="low" then
 		prioNum=0
 	elseif priority=="normal" then
@@ -762,7 +761,7 @@ function spairs(t, order) --sorted pairs
     for k in pairs(t) do keys[#keys+1] = k end
 
     -- if order function given, sort by it by passing the table and keys a, b,
-    -- otherwise just sort the keys 
+    -- otherwise just sort the keys
     if order then
         table.sort(keys, function(a,b) return order(t, a, b) end)
     else
@@ -811,7 +810,7 @@ end
 function List2Hash(list)
 	local hash={}
 	for _, li in pairs(list) do
-		hash[li]=true		
+		hash[li]=true
 	end
 	return hash
 end
@@ -821,7 +820,7 @@ function Hash2List(hash)
 	for hi, hv in pairs(hash) do
 		if hv and hv==true then
 			table.insert(list, hi)
-		end		
+		end
 	end
 	return list
 end
