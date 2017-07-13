@@ -183,6 +183,12 @@ function ePrintWeaponDef(weaponDef)
 	end
 end
 
+function ePrintFeatureDef(featureDef)
+   for name,param in featureDef:pairs() do
+		ePrintEx({name=name, param=param})
+	end
+end
+
 
 --------------------Common vars----------------------
 zkConstructors = {cloakcon=true, shieldcon=true, vehcon=true, hovercon=true, planecon=true, gunshipcon=true, spidercon=true, jumpcon=true, tankcon=true, amphcon=true, shipcon=true} --conjurer, convict, mason, quill, crane, weaver, freaker, welder, conch, mariner

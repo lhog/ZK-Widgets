@@ -9,7 +9,7 @@ function widget:GetInfo()
     desc      = "Reminds about various economic events",
     author    = "ivand",
     date      = "2015",
-    license   = "private",
+    license   = "public",
     layer     = 0,
     enabled   = true  --  loaded by default?
   }
@@ -388,13 +388,23 @@ function widget:DrawWorld()
 					gl.Translate(info.x, info.y, info.z)
 					gl.Billboard()
 					--gl.Rotate(270, 1, 0, 0)
-					gl.Translate(0, 12 * info.iconSize * info.scale, 0)
+					gl.Translate(0, 4 * info.iconSize * info.scale, 0)
 
-					gl.Color(color, color, 0, 1)
-					gl.Texture(WARNING_IMAGE)
-					local iconSideSize = info.iconSize * info.scale * 6
-					gl.TexRect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
-					gl.Texture(false)
+					gl.Color(color, color, 0, 0.4)
+					--gl.Texture(WARNING_IMAGE)
+					--local iconSideSize = info.iconSize * info.scale * 6
+					local iconSideSize = info.iconSize * info.scale * 10
+					gl.PolygonMode(GL.FRONT, GL.FILL)
+					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
+
+					gl.Color(color, color, 0, 0.8)
+					gl.LineWidth(9.0/info.scale)
+					gl.PolygonMode(GL.FRONT, GL.LINE)
+					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
+					gl.LineWidth(1.0)
+
+					--gl.TexRect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
+					--gl.Texture(false)
 				else
 					gl.Blending(GL.ONE, GL.ONE)
 					gl.DepthTest(GL.LEQUAL)
