@@ -401,6 +401,7 @@ function widget:DrawWorld()
 					gl.LineWidth(9.0/info.scale)
 					gl.PolygonMode(GL.FRONT, GL.LINE)
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
+					gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 					gl.LineWidth(1.0)
 
 					--gl.TexRect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
