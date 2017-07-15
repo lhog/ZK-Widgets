@@ -394,12 +394,12 @@ function widget:DrawWorld()
 					--gl.Texture(WARNING_IMAGE)
 					--local iconSideSize = info.iconSize * info.scale * 6
 					local iconSideSize = info.iconSize * info.scale * 10
-					gl.PolygonMode(GL.FRONT, GL.FILL)
+					gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
 
 					gl.Color(color, color, 0, 0.8)
 					gl.LineWidth(9.0/info.scale)
-					gl.PolygonMode(GL.FRONT, GL.LINE)
+					gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
 					gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 					gl.LineWidth(1.0)
@@ -413,6 +413,7 @@ function widget:DrawWorld()
 					gl.Culling(GL.BACK)
 					gl.Color(color, color, 0, 1)
 					gl.Unit(uId, true)
+					gl.Culling(false)
 				end
 
 				gl.PopMatrix()
