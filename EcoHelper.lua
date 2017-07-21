@@ -83,44 +83,13 @@ local function UpdateExistingHeavenZones()
 end
 
 
-local gridSize = 128 --elmo
-local gridSq = gridSize * gridSize
-local gridX = math.floor(mapSizeX / gridSize)
-local gridZ = math.floor(mapSizeZ / gridSize)
-
-local function GetGridXZ(gridIndex)
-	return math.floor(gridIndex / gridZ), math.floor(gridIndex % gridZ)
-end
-
-local function GetGridIndex(gx, gz)
-	gx = math.max(gx, 0)
-	gx = math.min(gx, gridX - 1)
-
-	gz = math.max(gz, 0)
-	gz = math.min(gz, gridZ - 1)
-
-	return gz + gx * gridZ
-end
-
-local function GetGridIndexWorld(x, z)
-	local gx = math.floor(x / gridSize)
-	local gz = math.floor(z / gridSize)
-	return GetGridIndex(gx, gz)
-end
-
 local scanInterval = 1 * Game.gameSpeed
 local scanForRemovalInterval = 60 * Game.gameSpeed --a minute
+
 local knownFeatures = {}
 
-local featuresGrid = {}
-for i = 0, gridX * gridZ - 1 do
-	featuresGrid[i] = {
-		metal = 0,
-	}
-end
-
 local E2M = 2 / 70 --solar ratio
-local function UpdateFeatutesGrid(gf)
+local function UpdateFeatures(gf)
 	for _, fID in ipairs(Spring.GetAllFeatures()) do
 		if not knownFeatures[fID] then --first time seen
 			knownFeatures[fID] = {}
@@ -132,8 +101,6 @@ local function UpdateFeatutesGrid(gf)
 			knownFeatures[fID].fz = fz
 
 			knownFeatures[fID].metal = 0
-
-			knownFeatures[fID].gridIdx = GetGridIndexWorld(fx, fz)
 		end
 
 		if knownFeatures[fID] and gf - knownFeatures[fID].lastScanned >= scanInterval then
@@ -141,10 +108,7 @@ local function UpdateFeatutesGrid(gf)
 
 			local fx, fy, fz = Spring.GetFeaturePosition(fID)
 
-			local gridIdxOld = knownFeatures[fID].gridIdx
-			local gridIdxNew = gridIdxOld
 			if knownFeatures[fID].fx ~= fx or knownFeatures[fID].fy ~= fy or knownFeatures[fID].fz ~= fz then
-				gridIdxNew = GetGridIndexWorld(fx, fz)
 				knownFeatures[fID].fx = fx
 				knownFeatures[fID].fy = fy
 				knownFeatures[fID].fz = fz
@@ -152,32 +116,12 @@ local function UpdateFeatutesGrid(gf)
 
 			local metal, _, energy = Spring.GetFeatureResources(fID)
 			metal = metal + energy * E2M
-
-			if knownFeatures[fID].metal ~= metal or gridIdxNew ~= gridIdxOld then
-
-				if gridIdxOld == gridIdxNew then
-					featuresGrid[gridIdxNew].metal = (featuresGrid[gridIdxNew].metal or 0) + (metal - knownFeatures[fID].metal)
-				else
-					featuresGrid[gridIdxOld].metal = (featuresGrid[gridIdxOld].metal or 0) - knownFeatures[fID].metal
-					featuresGrid[gridIdxNew].metal = (featuresGrid[gridIdxNew].metal or 0) + metal
-				end
-
-				knownFeatures[fID].metal = metal
-
-				--Spring.Echo("featuresGrid[gridIdxOld].metal", featuresGrid[gridIdxOld].metal)
-				--Spring.Echo("featuresGrid[gridIdxNew].metal", featuresGrid[gridIdxNew].metal)
-			end
-
+			knownFeatures[fID].metal = metal
 		end
 	end
 
 	for fID, fInfo in pairs(knownFeatures) do
-		if fInfo.lastScanned == gf then
-			local highestFID = featuresGrid[fInfo.gridIdx].highestFID
-			if (highestFID == nil) or (fInfo.fy > knownFeatures[highestFID].fy) then
-				featuresGrid[fInfo.gridIdx].highestFID = fID
-			end
-		end
+		knownFeatures[fID].clID = nil
 		if gf - fInfo.lastScanned >= scanForRemovalInterval then --long time unseen features, maybe they were relcaimed or destroyed?
 			local los = Spring.IsPosInLos(fInfo.fx, fInfo.fy, fInfo.fz, myAllyTeamID)
 			if los then --this place has no feature, it's been moved or reclaimed or destroyed
@@ -187,8 +131,104 @@ local function UpdateFeatutesGrid(gf)
 	end
 end
 
-local minMetalWorthDensity = 100 / 16384 --metal density (metal/elmo^2) in Grid worth clustering
-local minMetalWorthGrid = minMetalWorthDensity * gridSq
+local minRequiredForce = 0.5
+--local minRequiredForce = 1
+local minFeatureMetal = 5
+
+local featureClusters
+
+local function ClusterizeFeatures(gf)
+	UpdateFeatures(gf)
+
+	featureClusters = {}
+
+	local sortedTable = {}
+	for fID, fInfo in pairs(knownFeatures) do
+		if fInfo.metal >= minFeatureMetal then
+			sortedTable[#sortedTable + 1] = {fInfo.metal, fID}
+		end
+	end
+
+	table.sort(sortedTable, function(a,b) return a[1] > b[1] end)
+	Spring.Echo("#sortedTable", #sortedTable)
+
+	for i = 1, #sortedTable do
+		local metal1 = sortedTable[i][1]
+		local fID1 = sortedTable[i][2]
+		if not knownFeatures[fID1].clID then
+			local fx1, fz1 = knownFeatures[fID1].fx, knownFeatures[fID1].fz
+
+			featureClusters[#featureClusters + 1] = {}
+			knownFeatures[fID1].clID = #featureClusters
+
+			local thisCluster = {
+				members = {fID1},
+				cx = fx1,
+				cz = fz1,
+				metal = metal1,
+			}
+
+			local iter = 0
+
+			local enoughForce = true
+			while enoughForce do
+				iter = iter + 1
+				local forceMax = -math.huge
+				local metalMax = nil
+				local forceMaxIdx = nil
+
+				local tcx, tcz = thisCluster.cx, thisCluster.cz
+				for j = i + 1, #sortedTable do
+					local metal2 = sortedTable[j][1]
+					local fID2 = sortedTable[j][2]
+					if not knownFeatures[fID2].clID then
+						local fx2, fz2 = knownFeatures[fID2].fx, knownFeatures[fID2].fz
+
+						local sqDist = (tcx - fx2)^2 + (tcz - fz2)^2
+						sqDist = math.max(1, sqDist)
+
+						local force = metal1 * metal2 / sqDist
+						if force >= minRequiredForce and force > forceMax then
+							forceMax = force
+							metalMax = metal2
+							forceMaxIdx = j
+						end
+					end
+				end
+				if forceMaxIdx then
+					Spring.Echo("forceMax", forceMax, "#featureClusters", #featureClusters)
+					local fIDMax = sortedTable[forceMaxIdx][2]
+
+					knownFeatures[fIDMax].clID = #featureClusters
+					thisCluster.members[#thisCluster.members + 1] = fIDMax
+
+					thisCluster.metal = thisCluster.metal + metalMax
+					local totalMetal = thisCluster.metal
+					local cx, cz = 0, 0
+					for n = 1, #thisCluster.members do
+						local fID = thisCluster.members[n]
+						Spring.Echo("#featureClusters", #featureClusters, "totalMetal", totalMetal)
+						cx = cx + knownFeatures[fID].metal * knownFeatures[fID].fx / totalMetal
+						cz = cz + knownFeatures[fID].metal * knownFeatures[fID].fz / totalMetal
+					end
+					Spring.MarkerAddPoint(cx, 0, cz, string.format("C %i(%i)", #featureClusters, iter))
+					thisCluster.cx = cx
+					thisCluster.cz = cz
+				end
+				enoughForce = (forceMaxIdx ~= nil)
+				--ePrintEx({thisCluster=thisCluster})
+			end
+
+			featureClusters[#featureClusters] = thisCluster
+		end
+	end
+	for fc = 1, #featureClusters do
+		for fcm = 1, #featureClusters[fc].members do
+			local fID = featureClusters[fc].members[fcm]
+			Spring.MarkerAddPoint(knownFeatures[fID].fx, 0, knownFeatures[fID].fz, string.format("%i(%i)", fc, fcm))
+		end
+	end
+end
 
 --local reclaimColor = (1.0, 0.2, 1.0, 0.7);
 local reclaimColor = {1.0, 0.2, 1.0, 0.4}
@@ -228,6 +268,8 @@ function widget:Initialize()
 	for _, unitID in pairs(units) do
 		widget:UnitGiven(unitID, Spring.GetUnitDefID(unitID), myTeamID, nil)
 	end
+
+	ClusterizeFeatures(spGetGameFrame())
 
 	--ToggleIdle()
 end
@@ -569,7 +611,7 @@ function widget:GameFrame(frame)
 	elseif frameMod == 0 then
 		--Spring.Echo("SetEcoHighPriority")
 		SetEcoHighPriority()
-		--UpdateFeatutesGrid(frame)
+		--ClusterizeFeatures(frame)
 	end
 end
 
@@ -707,6 +749,7 @@ function widget:DrawWorld()
 		end
 	end
 
+	--[[
 	for fgIdx, fgInfo in pairs(featuresGrid) do
 		if fgInfo and fgInfo.metal >= minMetalWorthGrid then
 			local gx, gz = GetGridXZ(fgIdx)
@@ -730,6 +773,7 @@ function widget:DrawWorld()
 			gl.PopMatrix()
 		end
 	end
+	]]--
 end
 
 function widget:Shutdown()
