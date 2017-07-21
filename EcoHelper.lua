@@ -16,11 +16,17 @@ function widget:GetInfo()
 end
 
 local screenx, screeny
-local myTeamID = Spring.GetMyTeamID()
+
+local myTeamID
+local myAllyTeamID
+local function UpdateTeamAndAllyTeamID()
+	myTeamID = Spring.GetMyTeamID()
+	myAllyTeamID = Spring.GetMyAllyTeamID()
+end
+
+
 
 local iconTypes = VFS.Include("LuaUI/Configs/icontypes.lua")
-
-
 
 local function ToggleIdleOne(uId)
 	--Spring.Echo("ToggleIdleOne")
@@ -76,6 +82,133 @@ local function UpdateExistingHeavenZones()
 	end
 end
 
+
+local gridSize = 128 --elmo
+local gridSq = gridSize * gridSize
+local gridX = math.floor(mapSizeX / gridSize)
+local gridZ = math.floor(mapSizeZ / gridSize)
+
+local function GetGridXZ(gridIndex)
+	return math.floor(gridIndex / gridZ), math.floor(gridIndex % gridZ)
+end
+
+local function GetGridIndex(gx, gz)
+	gx = math.max(gx, 0)
+	gx = math.min(gx, gridX - 1)
+
+	gz = math.max(gz, 0)
+	gz = math.min(gz, gridZ - 1)
+
+	return gz + gx * gridZ
+end
+
+local function GetGridIndexWorld(x, z)
+	local gx = math.floor(x / gridSize)
+	local gz = math.floor(z / gridSize)
+	return GetGridIndex(gx, gz)
+end
+
+local scanInterval = 1 * Game.gameSpeed
+local scanForRemovalInterval = 60 * Game.gameSpeed --a minute
+local knownFeatures = {}
+
+local featuresGrid = {}
+for i = 0, gridX * gridZ - 1 do
+	featuresGrid[i] = {
+		metal = 0,
+	}
+end
+
+local E2M = 2 / 70 --solar ratio
+local function UpdateFeatutesGrid(gf)
+	for _, fID in ipairs(Spring.GetAllFeatures()) do
+		if not knownFeatures[fID] then --first time seen
+			knownFeatures[fID] = {}
+			knownFeatures[fID].lastScanned = -math.huge
+
+			local fx, fy, fz = Spring.GetFeaturePosition(fID)
+			knownFeatures[fID].fx = fx
+			knownFeatures[fID].fy = fy
+			knownFeatures[fID].fz = fz
+
+			knownFeatures[fID].metal = 0
+
+			knownFeatures[fID].gridIdx = GetGridIndexWorld(fx, fz)
+		end
+
+		if knownFeatures[fID] and gf - knownFeatures[fID].lastScanned >= scanInterval then
+			knownFeatures[fID].lastScanned = gf
+
+			local fx, fy, fz = Spring.GetFeaturePosition(fID)
+
+			local gridIdxOld = knownFeatures[fID].gridIdx
+			local gridIdxNew = gridIdxOld
+			if knownFeatures[fID].fx ~= fx or knownFeatures[fID].fy ~= fy or knownFeatures[fID].fz ~= fz then
+				gridIdxNew = GetGridIndexWorld(fx, fz)
+				knownFeatures[fID].fx = fx
+				knownFeatures[fID].fy = fy
+				knownFeatures[fID].fz = fz
+			end
+
+			local metal, _, energy = Spring.GetFeatureResources(fID)
+			metal = metal + energy * E2M
+
+			if knownFeatures[fID].metal ~= metal or gridIdxNew ~= gridIdxOld then
+
+				if gridIdxOld == gridIdxNew then
+					featuresGrid[gridIdxNew].metal = (featuresGrid[gridIdxNew].metal or 0) + (metal - knownFeatures[fID].metal)
+				else
+					featuresGrid[gridIdxOld].metal = (featuresGrid[gridIdxOld].metal or 0) - knownFeatures[fID].metal
+					featuresGrid[gridIdxNew].metal = (featuresGrid[gridIdxNew].metal or 0) + metal
+				end
+
+				knownFeatures[fID].metal = metal
+
+				--Spring.Echo("featuresGrid[gridIdxOld].metal", featuresGrid[gridIdxOld].metal)
+				--Spring.Echo("featuresGrid[gridIdxNew].metal", featuresGrid[gridIdxNew].metal)
+			end
+
+		end
+	end
+
+	for fID, fInfo in pairs(knownFeatures) do
+		if fInfo.lastScanned == gf then
+			local highestFID = featuresGrid[fInfo.gridIdx].highestFID
+			if (highestFID == nil) or (fInfo.fy > knownFeatures[highestFID].fy) then
+				featuresGrid[fInfo.gridIdx].highestFID = fID
+			end
+		end
+		if gf - fInfo.lastScanned >= scanForRemovalInterval then --long time unseen features, maybe they were relcaimed or destroyed?
+			local los = Spring.IsPosInLos(fInfo.fx, fInfo.fy, fInfo.fz, myAllyTeamID)
+			if los then --this place has no feature, it's been moved or reclaimed or destroyed
+				knownFeatures[fID] = nil
+			end
+		end
+	end
+end
+
+local minMetalWorthDensity = 100 / 16384 --metal density (metal/elmo^2) in Grid worth clustering
+local minMetalWorthGrid = minMetalWorthDensity * gridSq
+
+--local reclaimColor = (1.0, 0.2, 1.0, 0.7);
+local reclaimColor = {1.0, 0.2, 1.0, 0.4}
+local reclaimEdgeColor = {1.0, 0.2, 1.0, 0.8}
+local flashColor = {1.0, 0.0, 0.0, 0.15}
+local flashMetalTextColor = {1.0, 0.0, 0.0, 0.8}
+
+local flashIdleTextColor = {1.0, 1.0, 0.0, 0.8}
+local idleFillColor = {1.0, 1.0, 0.0, 0.4}
+local idleModelColor = {1.0, 1.0, 0.0, 1.0}
+
+local flashEStallTextColor = {1.0, 0.0, 1.0, 0.8}
+
+local textScale = {1.0, 0.4, 1.0}
+
+
+local function ColorMul(scalar, actionColor)
+	return {scalar * actionColor[1], scalar * actionColor[2], scalar * actionColor[3], actionColor[4]}
+end
+
 function widget:Initialize()
 	CheckSpecState(widgetName)
 	curModID = string.upper(Game.modShortName or "")
@@ -83,6 +216,8 @@ function widget:Initialize()
 		widgetHandler:RemoveWidget()
 		return
 	end
+
+	UpdateTeamAndAllyTeamID()
 
 	--local iconDist = Spring.GetConfigInt("UnitIconDist")
 	UpdateExistingHeavenZones()
@@ -98,27 +233,27 @@ function widget:Initialize()
 end
 
 function widget:TeamChanged(teamID)
-	myTeamID = Spring.GetMyTeamID()
+	UpdateTeamAndAllyTeamID()
 end
 
 function widget:PlayerChanged(playerID)
-	myTeamID = Spring.GetMyTeamID()
+	UpdateTeamAndAllyTeamID()
 end
 
 function widget:PlayerAdded(playerID)
-	myTeamID = Spring.GetMyTeamID()
+	UpdateTeamAndAllyTeamID()
 end
 
 function widget:PlayerRemoved(playerID)
-	myTeamID = Spring.GetMyTeamID()
+	UpdateTeamAndAllyTeamID()
 end
 
 function widget:TeamDied(teamID)
-	myTeamID = Spring.GetMyTeamID()
+	UpdateTeamAndAllyTeamID()
 end
 
 function widget:TeamChanged(teamID)
-	myTeamID = Spring.GetMyTeamID()
+	UpdateTeamAndAllyTeamID()
 end
 
 local idleList={}
@@ -420,8 +555,6 @@ local waitIdlePeriod= 2 * 30 --x times second(s)
 
 function widget:GameFrame(frame)
 	local frameMod = frame % checkFrequency
-	--Spring.Echo("frameMod", frameMod)
-	--Spring.Echo("checkFrequencyBias", checkFrequencyBias)
 	if frameMod == checkFrequencyBias then
 		flashIdleWorkers = false
 		for uId, info in pairs(idleList) do
@@ -436,6 +569,7 @@ function widget:GameFrame(frame)
 	elseif frameMod == 0 then
 		--Spring.Echo("SetEcoHighPriority")
 		SetEcoHighPriority()
+		--UpdateFeatutesGrid(frame)
 	end
 end
 
@@ -499,33 +633,33 @@ function widget:DrawScreen()
 	if flashMetalExcess or flashIdleWorkers or flashEnergyStall then
 		--rgba
 		gl.PushMatrix()
-		gl.Color(color, 0, 0, 0.15)
+		gl.Color(ColorMul(color, flashColor))
 		DrawBigFlashingRect()
 		gl.PopMatrix()
 
 		if flashMetalExcess then
 			gl.PushMatrix()
-			gl.Color(color, 0, 0, 0.8)
+			gl.Color(ColorMul(color, flashMetalTextColor))
 			gl.Translate(screenx/2, 2*screeny/3-50, 0)
-			gl.Scale(1, 0.4, 1)
+			gl.Scale(textScale[1], textScale[2], textScale[3])
 			gl.Text("Metal Excess", 0, 0, 100, "cv")
 			gl.PopMatrix()
 		end
 
 		if flashIdleWorkers then
 			gl.PushMatrix()
-			gl.Color(color, color, 0, 0.8)
+			gl.Color(ColorMul(color, flashIdleTextColor))
 			gl.Translate(screenx/2, 2*screeny/3, 0)
-			gl.Scale(1, 0.4, 1)
+			gl.Scale(textScale[1], textScale[2], textScale[3])
 			gl.Text("Idle Workers", 0, 0, 100, "cv")
 			gl.PopMatrix()
 		end
 
 		if flashEnergyStall then
 			gl.PushMatrix()
-			gl.Color(color, 0, color, 0.8)
+			gl.Color(ColorMul(color, flashEStallTextColor))
 			gl.Translate(screenx/2, 2*screeny/3+50, 0)
-			gl.Scale(1, 0.4, 1)
+			gl.Scale(textScale[1], textScale[2], textScale[3])
 			gl.Text("Stalling Energy", 0, 0, 100, "cv")
 			gl.PopMatrix()
 		end
@@ -544,12 +678,12 @@ function widget:DrawWorld()
 					gl.Billboard()
 					gl.Translate(0, 4 * info.iconSize * info.scale, 0)
 
-					gl.Color(color, color, 0, 0.4)
+					gl.Color(ColorMul(color, idleFillColor))
 					local iconSideSize = info.iconSize * info.scale * 10
 					gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
 
-					gl.Color(color, color, 0, 0.8)
+					gl.Color(ColorMul(color, flashIdleTextColor))
 					gl.LineWidth(9.0/info.scale)
 					gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
@@ -560,7 +694,7 @@ function widget:DrawWorld()
 					gl.DepthTest(GL.LEQUAL)
 					gl.PolygonOffset(-10, -10)
 					gl.Culling(GL.BACK)
-					gl.Color(color, color, 0, 1)
+					gl.Color(ColorMul(color, idleModelColor))
 					gl.Unit(uId, true)
 					gl.Culling(false)
 				end
@@ -570,6 +704,30 @@ function widget:DrawWorld()
 				----
 			end
 
+		end
+	end
+
+	for fgIdx, fgInfo in pairs(featuresGrid) do
+		if fgInfo and fgInfo.metal >= minMetalWorthGrid then
+			local gx, gz = GetGridXZ(fgIdx)
+			gl.PushMatrix()
+
+			--Spring.Echo("fgInfo.highestFID", fgInfo.highestFID)
+			local height = ((fgInfo.highestFID and knownFeatures[fgInfo.highestFID] and knownFeatures[fgInfo.highestFID].fy) or 100)
+			gl.Translate(gx * gridSize, height, gz * gridSize)
+			gl.Color(ColorMul(color, reclaimColor))
+			gl.Rotate(90, 1, 0, 0)
+			gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
+			gl.Rect(0, 0, gridSize, gridSize)
+
+			gl.LineWidth(1.0)
+			gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
+			gl.Color(ColorMul(color, reclaimEdgeColor))
+			gl.Rect(0, 0, gridSize, gridSize)
+			gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
+			gl.LineWidth(1.0)
+
+			gl.PopMatrix()
 		end
 	end
 end
