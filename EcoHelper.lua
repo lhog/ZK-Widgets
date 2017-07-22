@@ -87,9 +87,11 @@ local scanInterval = 1 * Game.gameSpeed
 local scanForRemovalInterval = 10 * Game.gameSpeed --10 sec
 
 local knownFeatures = {}
+local featuresUpdated
 
 local E2M = 2 / 70 --solar ratio
 local function UpdateFeatures(gf)
+	featuresUpdated = false
 	for _, fID in ipairs(Spring.GetAllFeatures()) do
 		if not knownFeatures[fID] then --first time seen
 			knownFeatures[fID] = {}
@@ -100,9 +102,12 @@ local function UpdateFeatures(gf)
 			knownFeatures[fID].y = fy
 			knownFeatures[fID].z = fz
 
-			knownFeatures[fID].isGaia = (Spring.GetFeatureTeam(fID) ~= gaiaTeamId)
+			knownFeatures[fID].isGaia = (Spring.GetFeatureTeam(fID) == gaiaTeamId)
+			knownFeatures[fID].height = Spring.GetFeatureHeight(fID)
+			knownFeatures[fID].drawAlt = ((fy > 0 and fy) or 0) + knownFeatures[fID].height + 10
 
 			knownFeatures[fID].metal = 0
+			featuresUpdated = true
 		end
 
 		if knownFeatures[fID] and gf - knownFeatures[fID].lastScanned >= scanInterval then
@@ -114,40 +119,51 @@ local function UpdateFeatures(gf)
 				knownFeatures[fID].x = fx
 				knownFeatures[fID].y = fy
 				knownFeatures[fID].z = fz
+
+				knownFeatures[fID].drawAlt = ((fy > 0 and fy) or 0) + knownFeatures[fID].height + 10
+				featuresUpdated = true
 			end
 
 			local metal, _, energy = Spring.GetFeatureResources(fID)
 			metal = metal + energy * E2M
-			knownFeatures[fID].metal = metal
+			if knownFeatures[fID].metal ~= metal then
+				knownFeatures[fID].metal = metal
+				featuresUpdated = true
+			end
 		end
 	end
 
 	for fID, fInfo in pairs(knownFeatures) do
-		knownFeatures[fID].clID = nil
 
 		if fInfo.isGaia and Spring.ValidFeatureID(fID) == false then
+			Spring.Echo("fInfo.isGaia and Spring.ValidFeatureID(fID) == false")
 			knownFeatures[fID] = nil
 			fInfo = nil
+			featuresUpdated = true
 		end
 
 		if fInfo and gf - fInfo.lastScanned >= scanForRemovalInterval then --long time unseen features, maybe they were relcaimed or destroyed?
 			local los = Spring.IsPosInLos(fInfo.x, fInfo.y, fInfo.z, myAllyTeamID)
 			if los then --this place has no feature, it's been moved or reclaimed or destroyed
+				Spring.Echo("this place has no feature, it's been moved or reclaimed or destroyed")
+				fInfo = nil
 				knownFeatures[fID] = nil
+				featuresUpdated = true
 			end
 		end
 
+		if fInfo and featuresUpdated then
+			knownFeatures[fID].clID = nil
+		end
 	end
 end
 
 local minSqDistance = 170^2
 --local minRequiredForce = 1
-local minFeatureMetal = 5
+local minFeatureMetal = 8 --flea
 
 local featureClusters = {}
 local function ClusterizeFeatures(gf)
-	UpdateFeatures(gf)
-
 	featureClusters = {}
 
 	local sortedTable = {}
@@ -183,6 +199,10 @@ local function ClusterizeFeatures(gf)
 			local goodDist = true
 			while goodDist do
 				iter = iter + 1
+				if iter > 200 then
+					Spring.Log(widget:GetInfo().name, LOG.ERROR, "Stuck in goodDist, made more than 200 iterations")
+					break
+				end
 				local minDist = math.huge
 				local metalAddition = nil
 				local minDistIdx = nil
@@ -312,7 +332,7 @@ local function ClustersToConvexHull()
 			local fID = featureClusters[fc].members[fcm]
 			clusterPoints[#clusterPoints + 1] = {
 				x = knownFeatures[fID].x,
-				y = knownFeatures[fID].y,
+				y = knownFeatures[fID].drawAlt,
 				z = knownFeatures[fID].z
 			}
 			--Spring.MarkerAddPoint(knownFeatures[fID].x, 0, knownFeatures[fID].z, string.format("%i(%i)", fc, fcm))
@@ -361,8 +381,8 @@ local function ClustersToConvexHull()
 end
 
 --local reclaimColor = (1.0, 0.2, 1.0, 0.7);
-local reclaimColor = {1.0, 0.2, 1.0, 0.2}
-local reclaimEdgeColor = {1.0, 0.2, 1.0, 0.3}
+local reclaimColor = {1.0, 0.2, 1.0, 0.3}
+local reclaimEdgeColor = {1.0, 0.2, 1.0, 0.5}
 local flashColor = {1.0, 0.0, 0.0, 0.15}
 local flashMetalTextColor = {1.0, 0.0, 0.0, 0.8}
 
@@ -733,34 +753,44 @@ local function SetEcoHighPriority()
 	end
 end
 
-local checkFrequency = 30
-local checkFrequencyBias = math.floor(checkFrequency / 2)
-local waitIdlePeriod= 2 * 30 --x times second(s)
+local color
+local cameraScale
 
-function widget:GameFrame(frame)
-	local frameMod = frame % checkFrequency
-	if frameMod == checkFrequencyBias then
-		flashIdleWorkers = false
-		for uId, info in pairs(idleList) do
-			if info and info.gameFrame and frame >= info.gameFrame + waitIdlePeriod then
-				idleList[uId].flash = true
-				flashIdleWorkers = true
-			else
-				idleList[uId].flash = false
-			end
-		end
-		CheckAndSetFlashMetalExcess(frame)
-	elseif frameMod == 0 then
-		--Spring.Echo("SetEcoHighPriority")
-		SetEcoHighPriority()
+local drawFeatureConvexHullSolidList
+local function DrawFeatureConvexHullSolid()
+	gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
+	for i = 1, #featureConvexHulls do
+		gl.PushMatrix()
 
-		ClusterizeFeatures(frame)
-		ClustersToConvexHull()
+		gl.BeginEnd(GL.TRIANGLE_FAN, function()
+									   for j = 1, #featureConvexHulls[i] do
+										 gl.Vertex(featureConvexHulls[i][j].x, featureConvexHulls[i][j].y, featureConvexHulls[i][j].z)
+									   end
+									 end)
+
+		gl.PopMatrix()
 	end
 end
 
-local color
-local cameraScale
+local drawFeatureConvexHullEdgeList
+local function DrawFeatureConvexHullEdge()
+	gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
+	for i = 1, #featureConvexHulls do
+		gl.PushMatrix()
+
+		gl.BeginEnd(GL.LINE_LOOP, function()
+									   for j = 1, #featureConvexHulls[i] do
+										 gl.Vertex(featureConvexHulls[i][j].x, featureConvexHulls[i][j].y, featureConvexHulls[i][j].z)
+									   end
+									 end)
+
+		gl.PopMatrix()
+	end
+	gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
+end
+
+local checkFrequency = 30
+local checkFrequencyBias = math.floor(checkFrequency / 2)
 
 function widget:Update(dt)
 	local cx, cy, cz = Spring.GetCameraPosition()
@@ -807,8 +837,49 @@ function widget:Update(dt)
 	color = 0.5 + 0.5 * (frame % checkFrequency - checkFrequency)/(checkFrequency - 1)
 	if color < 0 then color = 0 end
 	if color > 1 then color = 1 end
+
+	if featuresUpdated or drawFeatureConvexHullSolidList == nil then
+		if drawFeatureConvexHullSolidList then
+			gl.DeleteList(drawFeatureConvexHullSolidList)
+			drawFeatureConvexHullSolidList = nil
+		end
+		if drawFeatureConvexHullEdgeList then
+			gl.DeleteList(drawFeatureConvexHullEdgeList)
+			drawFeatureConvexHullEdgeList = nil
+		end
+		drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
+		drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
+	end
+
 end
 
+local waitIdlePeriod= 2 * 30 --x times second(s)
+
+function widget:GameFrame(frame)
+	local frameMod = frame % checkFrequency
+	if frameMod == checkFrequencyBias then
+		flashIdleWorkers = false
+		for uId, info in pairs(idleList) do
+			if info and info.gameFrame and frame >= info.gameFrame + waitIdlePeriod then
+				idleList[uId].flash = true
+				flashIdleWorkers = true
+			else
+				idleList[uId].flash = false
+			end
+		end
+		CheckAndSetFlashMetalExcess(frame)
+	elseif frameMod == 0 then
+		--Spring.Echo("SetEcoHighPriority")
+		SetEcoHighPriority()
+
+		UpdateFeatures(frame)
+		--Spring.Echo("featuresUpdated", featuresUpdated)
+		if featuresUpdated then
+			ClusterizeFeatures(frame)
+			ClustersToConvexHull()
+		end
+	end
+end
 
 function widget:ViewResize(viewSizeX, viewSizeY)
 	screenx, screeny = widgetHandler:GetViewSizes()
@@ -861,25 +932,6 @@ function widget:DrawScreen()
 	end
 end
 
-local function drawEdgedPolygon(points, color, line)
-	gl.Color(color)
-	gl.Rotate(90, 1, 0, 0)
-
-	if line then
-		gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
-	else
-		gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
-	end
-	for i = 1, #points do
-		gl.Vertex(points[i].x, points[i].y, points[i].z)
-	end
-	if line then
-		gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
-	end
-
-end
-
-
 function widget:DrawWorld()
 	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end
 	for uId, info in pairs(idleList) do
@@ -923,52 +975,22 @@ function widget:DrawWorld()
 		end
 	end
 
+	gl.DepthTest(false)
 	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
-	for i = 1, #featureConvexHulls do
-		gl.PushMatrix()
-		gl.DepthTest(false)
+	if drawFeatureConvexHullSolidList then
+		gl.Color(ColorMul(color, reclaimColor))
+		gl.CallList(drawFeatureConvexHullSolidList)
+	end
 
-		gl.BeginEnd(GL.TRIANGLE_FAN, drawEdgedPolygon, featureConvexHulls[i], ColorMul(color, reclaimColor), false)
 
-		gl.DepthTest(true)
-		gl.PopMatrix()
-
-		gl.PushMatrix()
-		gl.DepthTest(false)
+	if drawFeatureConvexHullEdgeList then
 		gl.LineWidth(6.0 / cameraScale)
-
-		gl.BeginEnd(GL.LINE_LOOP, drawEdgedPolygon, featureConvexHulls[i], ColorMul(color, reclaimEdgeColor), true)
-
-		gl.DepthTest(true)
+		gl.Color(ColorMul(color, reclaimEdgeColor))
+		gl.CallList(drawFeatureConvexHullEdgeList)
 		gl.LineWidth(1.0)
-		gl.PopMatrix()
 	end
+	gl.DepthTest(true)
 
-	--[[
-	for fgIdx, fgInfo in pairs(featuresGrid) do
-		if fgInfo and fgInfo.metal >= minMetalWorthGrid then
-			local gx, gz = GetGridXZ(fgIdx)
-			gl.PushMatrix()
-
-			--Spring.Echo("fgInfo.highestFID", fgInfo.highestFID)
-			local height = ((fgInfo.highestFID and knownFeatures[fgInfo.highestFID] and knownFeatures[fgInfo.highestFID].fy) or 100)
-			gl.Translate(gx * gridSize, height, gz * gridSize)
-			gl.Color(ColorMul(color, reclaimColor))
-			gl.Rotate(90, 1, 0, 0)
-			gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
-			gl.Rect(0, 0, gridSize, gridSize)
-
-			gl.LineWidth(1.0)
-			gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
-			gl.Color(ColorMul(color, reclaimEdgeColor))
-			gl.Rect(0, 0, gridSize, gridSize)
-			gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
-			gl.LineWidth(1.0)
-
-			gl.PopMatrix()
-		end
-	end
-	]]--
 end
 
 function widget:Shutdown()
