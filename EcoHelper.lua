@@ -84,7 +84,7 @@ end
 
 
 local scanInterval = 1 * Game.gameSpeed
-local scanForRemovalInterval = 60 * Game.gameSpeed --a minute
+local scanForRemovalInterval = 10 * Game.gameSpeed --10 sec
 
 local knownFeatures = {}
 
@@ -96,9 +96,11 @@ local function UpdateFeatures(gf)
 			knownFeatures[fID].lastScanned = -math.huge
 
 			local fx, fy, fz = Spring.GetFeaturePosition(fID)
-			knownFeatures[fID].fx = fx
-			knownFeatures[fID].fy = fy
-			knownFeatures[fID].fz = fz
+			knownFeatures[fID].x = fx
+			knownFeatures[fID].y = fy
+			knownFeatures[fID].z = fz
+
+			knownFeatures[fID].isGaia = (Spring.GetFeatureTeam(fID) ~= gaiaTeamId)
 
 			knownFeatures[fID].metal = 0
 		end
@@ -108,10 +110,10 @@ local function UpdateFeatures(gf)
 
 			local fx, fy, fz = Spring.GetFeaturePosition(fID)
 
-			if knownFeatures[fID].fx ~= fx or knownFeatures[fID].fy ~= fy or knownFeatures[fID].fz ~= fz then
-				knownFeatures[fID].fx = fx
-				knownFeatures[fID].fy = fy
-				knownFeatures[fID].fz = fz
+			if knownFeatures[fID].x ~= fx or knownFeatures[fID].y ~= fy or knownFeatures[fID].z ~= fz then
+				knownFeatures[fID].x = fx
+				knownFeatures[fID].y = fy
+				knownFeatures[fID].z = fz
 			end
 
 			local metal, _, energy = Spring.GetFeatureResources(fID)
@@ -122,21 +124,27 @@ local function UpdateFeatures(gf)
 
 	for fID, fInfo in pairs(knownFeatures) do
 		knownFeatures[fID].clID = nil
-		if gf - fInfo.lastScanned >= scanForRemovalInterval then --long time unseen features, maybe they were relcaimed or destroyed?
-			local los = Spring.IsPosInLos(fInfo.fx, fInfo.fy, fInfo.fz, myAllyTeamID)
+
+		if fInfo.isGaia and Spring.ValidFeatureID(fID) == false then
+			knownFeatures[fID] = nil
+			fInfo = nil
+		end
+
+		if fInfo and gf - fInfo.lastScanned >= scanForRemovalInterval then --long time unseen features, maybe they were relcaimed or destroyed?
+			local los = Spring.IsPosInLos(fInfo.x, fInfo.y, fInfo.z, myAllyTeamID)
 			if los then --this place has no feature, it's been moved or reclaimed or destroyed
 				knownFeatures[fID] = nil
 			end
 		end
+
 	end
 end
 
-local minRequiredForce = 0.5
+local minSqDistance = 170^2
 --local minRequiredForce = 1
 local minFeatureMetal = 5
 
-local featureClusters
-
+local featureClusters = {}
 local function ClusterizeFeatures(gf)
 	UpdateFeatures(gf)
 
@@ -150,89 +158,211 @@ local function ClusterizeFeatures(gf)
 	end
 
 	table.sort(sortedTable, function(a,b) return a[1] > b[1] end)
-	Spring.Echo("#sortedTable", #sortedTable)
+	--Spring.Echo("#sortedTable", #sortedTable)
 
 	for i = 1, #sortedTable do
 		local metal1 = sortedTable[i][1]
 		local fID1 = sortedTable[i][2]
 		if not knownFeatures[fID1].clID then
-			local fx1, fz1 = knownFeatures[fID1].fx, knownFeatures[fID1].fz
+			local fx1, fz1 = knownFeatures[fID1].x, knownFeatures[fID1].z
 
 			featureClusters[#featureClusters + 1] = {}
 			knownFeatures[fID1].clID = #featureClusters
 
 			local thisCluster = {
 				members = {fID1},
-				cx = fx1,
-				cz = fz1,
+				xmin = fx1,
+				xmax = fx1,
+				zmin = fz1,
+				zmax = fz1,
 				metal = metal1,
 			}
 
 			local iter = 0
 
-			local enoughForce = true
-			while enoughForce do
+			local goodDist = true
+			while goodDist do
 				iter = iter + 1
-				local forceMax = -math.huge
-				local metalMax = nil
-				local forceMaxIdx = nil
+				local minDist = math.huge
+				local metalAddition = nil
+				local minDistIdx = nil
 
-				local tcx, tcz = thisCluster.cx, thisCluster.cz
+				local txmin, txmax, tzmin, tzmax = thisCluster.xmin, thisCluster.xmax, thisCluster.zmin, thisCluster.zmax
 				for j = i + 1, #sortedTable do
 					local metal2 = sortedTable[j][1]
 					local fID2 = sortedTable[j][2]
 					if not knownFeatures[fID2].clID then
-						local fx2, fz2 = knownFeatures[fID2].fx, knownFeatures[fID2].fz
+						local fx2, fz2 = knownFeatures[fID2].x, knownFeatures[fID2].z
 
-						local sqDist = (tcx - fx2)^2 + (tcz - fz2)^2
-						sqDist = math.max(1, sqDist)
+						local dx, dz = 0, 0
 
-						local force = metal1 * metal2 / sqDist
-						if force >= minRequiredForce and force > forceMax then
-							forceMax = force
-							metalMax = metal2
-							forceMaxIdx = j
+						if     fx2 > txmax then
+							dx = fx2 - txmax
+						elseif fx2 < txmin then
+							dx = fx2 - txmin
+						end
+
+						if     fz2 > tzmax then
+							dz = fz2 - tzmax
+						elseif fz2 < tzmin then
+							dz = fz2 - tzmin
+						end
+
+						local sqDist = dx^2 + dz^2
+
+						if sqDist <= minSqDistance and sqDist < minDist then
+							--Spring.Echo("minDist", sqDist)
+							minDist = sqDist
+							metalAddition = metal2
+							minDistIdx = j
 						end
 					end
 				end
-				if forceMaxIdx then
-					Spring.Echo("forceMax", forceMax, "#featureClusters", #featureClusters)
-					local fIDMax = sortedTable[forceMaxIdx][2]
+
+				if minDistIdx then
+					--Spring.Echo("minDist", minDist, "#featureClusters", #featureClusters)
+					local fIDMax = sortedTable[minDistIdx][2]
 
 					knownFeatures[fIDMax].clID = #featureClusters
 					thisCluster.members[#thisCluster.members + 1] = fIDMax
 
-					thisCluster.metal = thisCluster.metal + metalMax
-					local totalMetal = thisCluster.metal
-					local cx, cz = 0, 0
-					for n = 1, #thisCluster.members do
-						local fID = thisCluster.members[n]
-						Spring.Echo("#featureClusters", #featureClusters, "totalMetal", totalMetal)
-						cx = cx + knownFeatures[fID].metal * knownFeatures[fID].fx / totalMetal
-						cz = cz + knownFeatures[fID].metal * knownFeatures[fID].fz / totalMetal
-					end
-					Spring.MarkerAddPoint(cx, 0, cz, string.format("C %i(%i)", #featureClusters, iter))
-					thisCluster.cx = cx
-					thisCluster.cz = cz
+					thisCluster.metal = thisCluster.metal + metalAddition
+
+					local fxM, fzM = knownFeatures[fIDMax].x, knownFeatures[fIDMax].z
+
+					txmin = math.min(txmin, fxM)
+					txmax = math.max(txmax, fxM)
+					tzmin = math.min(tzmin, fzM)
+					tzmax = math.max(tzmax, fzM)
+
+					thisCluster.xmin, thisCluster.xmax, thisCluster.zmin, thisCluster.zmax = txmin, txmax, tzmin, tzmax
+
 				end
-				enoughForce = (forceMaxIdx ~= nil)
+				goodDist = (minDistIdx ~= nil)
 				--ePrintEx({thisCluster=thisCluster})
 			end
 
 			featureClusters[#featureClusters] = thisCluster
 		end
 	end
+end
+
+--- JARVIS MARCH
+-- https://github.com/kennyledet/Algorithm-Implementations/blob/master/Convex_hull/Lua/Yonaba/convex_hull.lua
+
+-- Convex hull algorithms implementation
+-- See : http://en.wikipedia.org/wiki/Convex_hull
+
+-- Calculates the signed area
+local function signedArea(p, q, r)
+  local cross = (q.z - p.z) * (r.x - q.x)
+              - (q.x - p.x) * (r.z - q.z)
+  return cross
+end
+
+-- Checks if points p, q, r are oriented counter-clockwise
+local function isCCW(p, q, r) return signedArea(p, q, r) < 0 end
+
+-- Returns the convex hull using Jarvis' Gift wrapping algorithm).
+-- It expects an array of points as input. Each point is defined
+-- as : {x = <value>, y = <value>}.
+-- See : http://en.wikipedia.org/wiki/Gift_wrapping_algorithm
+-- points  : an array of points
+-- returns : the convex hull as an array of points
+local function JarvisMarch(points)
+  -- We need at least 3 points
+  local numPoints = #points
+  if numPoints < 3 then return end
+
+  -- Find the left-most point
+  local leftMostPointIndex = 1
+  for i = 1, numPoints do
+    if points[i].x < points[leftMostPointIndex].x then
+      leftMostPointIndex = i
+    end
+  end
+
+  local p = leftMostPointIndex
+  local hull = {} -- The convex hull to be returned
+
+  -- Process CCW from the left-most point to the start point
+  repeat
+    -- Find the next point q such that (p, i, q) is CCW for all i
+    q = points[p + 1] and p + 1 or 1
+    for i = 1, numPoints, 1 do
+      if isCCW(points[p], points[i], points[q]) then q = i end
+    end
+
+    table.insert(hull, points[q]) -- Save q to the hull
+    p = q  -- p is now q for the next iteration
+  until (p == leftMostPointIndex)
+
+  return hull
+end
+--- JARVIS MARCH
+
+local minDim = 100
+
+local featureConvexHulls = {}
+local function ClustersToConvexHull()
+	featureConvexHulls = {}
 	for fc = 1, #featureClusters do
+		local clusterPoints = {}
 		for fcm = 1, #featureClusters[fc].members do
 			local fID = featureClusters[fc].members[fcm]
-			Spring.MarkerAddPoint(knownFeatures[fID].fx, 0, knownFeatures[fID].fz, string.format("%i(%i)", fc, fcm))
+			clusterPoints[#clusterPoints + 1] = {
+				x = knownFeatures[fID].x,
+				y = knownFeatures[fID].y,
+				z = knownFeatures[fID].z
+			}
+			--Spring.MarkerAddPoint(knownFeatures[fID].x, 0, knownFeatures[fID].z, string.format("%i(%i)", fc, fcm))
 		end
+
+		local convexHull
+		if #clusterPoints >= 3 then
+			convexHull = JarvisMarch(clusterPoints)
+		else
+			local thisCluster = featureClusters[fc]
+
+			local xmin, xmax, zmin, zmax = thisCluster.xmin, thisCluster.xmax, thisCluster.zmin, thisCluster.zmax
+
+			local dx, dz = xmax - xmin, zmax - zmin
+
+			if dx < minDim then
+				xmin = xmin - (minDim - dx) / 2
+				xmax = xmax + (minDim - dx) / 2
+			end
+
+			if dz < minDim then
+				zmin = zmin - (minDim - dz) / 2
+				zmax = zmax + (minDim - dz) / 2
+			end
+
+			local height = clusterPoints[1].y
+			if #clusterPoints == 2 then
+				height = math.max(height, clusterPoints[2].y)
+			end
+
+			convexHull = {
+				{x = xmin, y = height, z = zmin},
+				{x = xmax, y = height, z = zmin},
+				{x = xmax, y = height, z = zmax},
+				{x = xmin, y = height, z = zmax},
+			}
+		end
+
+		featureConvexHulls[#featureConvexHulls + 1] = convexHull
+		--[[
+		for i = 1, #convexHull do
+			Spring.MarkerAddPoint(convexHull[i].x, convexHull[i].y, convexHull[i].z, string.format("C%i(%i)", fc, i))
+		end
+		]]--
 	end
 end
 
 --local reclaimColor = (1.0, 0.2, 1.0, 0.7);
-local reclaimColor = {1.0, 0.2, 1.0, 0.4}
-local reclaimEdgeColor = {1.0, 0.2, 1.0, 0.8}
+local reclaimColor = {1.0, 0.2, 1.0, 0.2}
+local reclaimEdgeColor = {1.0, 0.2, 1.0, 0.3}
 local flashColor = {1.0, 0.0, 0.0, 0.15}
 local flashMetalTextColor = {1.0, 0.0, 0.0, 0.8}
 
@@ -268,9 +398,6 @@ function widget:Initialize()
 	for _, unitID in pairs(units) do
 		widget:UnitGiven(unitID, Spring.GetUnitDefID(unitID), myTeamID, nil)
 	end
-
-	ClusterizeFeatures(spGetGameFrame())
-
 	--ToggleIdle()
 end
 
@@ -309,16 +436,16 @@ function widget:UnitIdle(unitID, unitDefID, unitTeam)
 			idleList[unitID] = {}
 			idleList[unitID].gameFrame = gameFrame
 			--local dims = Spring.GetUnitDefDimensions(unitDefID)
-			local uDef = UnitDefs[unitDefID]
+			--local uDef = UnitDefs[unitDefID]
 
 
 			--idleList[unitID].radius = math.round( math.sqrt( (uDef.zsize or uDef.ysize)^2 + uDef.xsize^2 ) ) * 4
-			local factor = 4 * 1.2
-			factor = factor * (tonumber(uDef.customParams.selection_scale) or 1)
+			--local factor = 4 * 1.2
+			--factor = factor * (tonumber(uDef.customParams.selection_scale) or 1)
 
 			--idleList[unitID].radius = dims.radius
 			--idleList[unitID].radius = math.round( math.sqrt( uDef.zsize^2 + uDef.xsize^2 ) ) * factor
-			idleList[unitID].radius = math.sqrt( 2 * math.max( uDef.zsize, uDef.xsize ) ^ 2 ) * factor
+			--idleList[unitID].radius = math.sqrt( 2 * math.max( uDef.zsize, uDef.xsize ) ^ 2 ) * factor
 		end
 	end
 end
@@ -394,6 +521,7 @@ local caretakerUnitDef = UnitDefNames["staticcon"].id
 local energyUnitsUnderConstruction = {}
 local storageUnitsUnderConstruction = {}
 local mexUnitsUnderConstruction = {}
+local caretakerUnitsUnderConstruction = {}
 
 function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOptions)
 	--if idleList[unitID] and	(cmdID<0 or idleCancelCommands[cmdID]) then
@@ -417,6 +545,9 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam)
 		if mexUnitDef == unitDefID then
 			mexUnitsUnderConstruction[unitID] = Spring.GetUnitRulesParam(unitID, "buildpriority") or 1
 		end
+		if caretakerUnitDef == unitDefID then
+			caretakerUnitsUnderConstruction[unitID] = Spring.GetUnitRulesParam(unitID, "buildpriority") or 1
+		end
 	end
 	ToggleIdleOne(unitID)
 end
@@ -432,6 +563,9 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 		end
 		if mexUnitDef == unitDefID then
 			mexUnitsUnderConstruction[unitID] = nil
+		end
+		if caretakerUnitDef == unitDefID then
+			caretakerUnitsUnderConstruction[unitID] = nil
 		end
 		-----
 		if caretakerUnitDef == unitDefID then
@@ -489,6 +623,7 @@ function widget:UnitDestroyed(unitID, unitDefID, unitTeam, attackerID, attackerD
 		end
 		---
 		if caretakerUnitDef == unitDefID then
+			caretakerUnitsUnderConstruction[unitID] = nil
 			local x, y, z = Spring.GetUnitPosition(unitID)
 
 			local thisZoneID = FindNearestHeavenZone(x, z)
@@ -582,6 +717,13 @@ local function SetEcoHighPriority()
 			storageUnitsUnderConstruction[uID] = highPrio
 		end
 	end
+	for uID, prio in pairs(caretakerUnitsUnderConstruction) do
+		if flashMetalExcess and prio and prio < highPrio then
+			--Spring.Echo("mexUnitsUnderConstruction")
+			Spring.GiveOrderToUnit(uID, CMD_PRIORITY, {highPrio}, SHIFT_TABLE)
+			mexUnitsUnderConstruction[uID] = highPrio
+		end
+	end
 	for uID, prio in pairs(mexUnitsUnderConstruction) do
 		if metalStall and prio and prio < highPrio then
 			--Spring.Echo("mexUnitsUnderConstruction")
@@ -611,14 +753,25 @@ function widget:GameFrame(frame)
 	elseif frameMod == 0 then
 		--Spring.Echo("SetEcoHighPriority")
 		SetEcoHighPriority()
-		--ClusterizeFeatures(frame)
+
+		ClusterizeFeatures(frame)
+		ClustersToConvexHull()
 	end
 end
 
 local color
+local cameraScale
 
 function widget:Update(dt)
 	local cx, cy, cz = Spring.GetCameraPosition()
+
+	local desc, w = Spring.TraceScreenRay(screenx / 2, screeny / 2, true)
+	if desc then
+		local cameraDist = math.min( 8000, math.sqrt( (cx-w[1])^2 + (cy-w[2])^2 + (cz-w[3])^2 ) )
+		cameraScale = math.sqrt((cameraDist / 600)) --number is an "optimal" view distance
+	else
+		cameraScale = 1.0
+	end
 
 	for uId, info in pairs(idleList) do
 		if info and info.flash then
@@ -708,6 +861,24 @@ function widget:DrawScreen()
 	end
 end
 
+local function drawEdgedPolygon(points, color, line)
+	gl.Color(color)
+	gl.Rotate(90, 1, 0, 0)
+
+	if line then
+		gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
+	else
+		gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
+	end
+	for i = 1, #points do
+		gl.Vertex(points[i].x, points[i].y, points[i].z)
+	end
+	if line then
+		gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
+	end
+
+end
+
 
 function widget:DrawWorld()
 	if Spring.IsGUIHidden() or Spring.IsCheatingEnabled() then return end
@@ -716,6 +887,7 @@ function widget:DrawWorld()
 			if info.flash then
 				gl.PushMatrix()
 				if info.isIconDraw then
+					gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
 					gl.Translate(info.x, info.y, info.z)
 					gl.Billboard()
 					gl.Translate(0, 4 * info.iconSize * info.scale, 0)
@@ -726,11 +898,12 @@ function widget:DrawWorld()
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
 
 					gl.Color(ColorMul(color, flashIdleTextColor))
-					gl.LineWidth(9.0/info.scale)
+					gl.LineWidth(9.0 / info.scale)
 					gl.PolygonMode(GL.FRONT_AND_BACK, GL.LINE)
 					gl.Rect(-iconSideSize, -iconSideSize, iconSideSize, iconSideSize)
 					gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 					gl.LineWidth(1.0)
+					--gl.Blending(false)
 				else
 					gl.Blending(GL.ONE, GL.ONE)
 					gl.DepthTest(GL.LEQUAL)
@@ -738,6 +911,7 @@ function widget:DrawWorld()
 					gl.Culling(GL.BACK)
 					gl.Color(ColorMul(color, idleModelColor))
 					gl.Unit(uId, true)
+					gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
 					gl.Culling(false)
 				end
 
@@ -747,6 +921,27 @@ function widget:DrawWorld()
 			end
 
 		end
+	end
+
+	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+	for i = 1, #featureConvexHulls do
+		gl.PushMatrix()
+		gl.DepthTest(false)
+
+		gl.BeginEnd(GL.TRIANGLE_FAN, drawEdgedPolygon, featureConvexHulls[i], ColorMul(color, reclaimColor), false)
+
+		gl.DepthTest(true)
+		gl.PopMatrix()
+
+		gl.PushMatrix()
+		gl.DepthTest(false)
+		gl.LineWidth(6.0 / cameraScale)
+
+		gl.BeginEnd(GL.LINE_LOOP, drawEdgedPolygon, featureConvexHulls[i], ColorMul(color, reclaimEdgeColor), true)
+
+		gl.DepthTest(true)
+		gl.LineWidth(1.0)
+		gl.PopMatrix()
 	end
 
 	--[[
