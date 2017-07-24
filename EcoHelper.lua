@@ -136,7 +136,7 @@ local function UpdateFeatures(gf)
 	for fID, fInfo in pairs(knownFeatures) do
 
 		if fInfo.isGaia and Spring.ValidFeatureID(fID) == false then
-			Spring.Echo("fInfo.isGaia and Spring.ValidFeatureID(fID) == false")
+			--Spring.Echo("fInfo.isGaia and Spring.ValidFeatureID(fID) == false")
 			knownFeatures[fID] = nil
 			fInfo = nil
 			featuresUpdated = true
@@ -145,7 +145,7 @@ local function UpdateFeatures(gf)
 		if fInfo and gf - fInfo.lastScanned >= scanForRemovalInterval then --long time unseen features, maybe they were relcaimed or destroyed?
 			local los = Spring.IsPosInLos(fInfo.x, fInfo.y, fInfo.z, myAllyTeamID)
 			if los then --this place has no feature, it's been moved or reclaimed or destroyed
-				Spring.Echo("this place has no feature, it's been moved or reclaimed or destroyed")
+				--Spring.Echo("this place has no feature, it's been moved or reclaimed or destroyed")
 				fInfo = nil
 				knownFeatures[fID] = nil
 				featuresUpdated = true
@@ -199,7 +199,7 @@ local function ClusterizeFeatures(gf)
 			local goodDist = true
 			while goodDist do
 				iter = iter + 1
-				if iter > 200 then
+				if iter > 1000 then
 					Spring.Log(widget:GetInfo().name, LOG.ERROR, "Stuck in goodDist, made more than 200 iterations")
 					break
 				end
@@ -450,8 +450,8 @@ local idleList={}
 function widget:UnitIdle(unitID, unitDefID, unitTeam)
 	if unitTeam == myTeamID then
 		local units=FilterMobileConstructors({unitID})
-		local built = select(5, Spring.GetUnitHealth(unitID))
-		if #units == 1 and built == 1.0 then
+		local stunnedOrInbuild = Spring.GetUnitIsStunned(unitID)
+		if #units == 1 and (not stunnedOrInbuild) then
 			local gameFrame = spGetGameFrame()
 			idleList[unitID] = {}
 			idleList[unitID].gameFrame = gameFrame
@@ -850,7 +850,6 @@ function widget:Update(dt)
 		drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
 		drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
 	end
-
 end
 
 local waitIdlePeriod= 2 * 30 --x times second(s)
@@ -976,10 +975,12 @@ function widget:DrawWorld()
 	end
 
 	gl.DepthTest(false)
+	--gl.DepthTest(true)
 	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
 	if drawFeatureConvexHullSolidList then
 		gl.Color(ColorMul(color, reclaimColor))
 		gl.CallList(drawFeatureConvexHullSolidList)
+		--DrawFeatureConvexHullSolid()
 	end
 
 
@@ -987,6 +988,7 @@ function widget:DrawWorld()
 		gl.LineWidth(6.0 / cameraScale)
 		gl.Color(ColorMul(color, reclaimEdgeColor))
 		gl.CallList(drawFeatureConvexHullEdgeList)
+		--DrawFeatureConvexHullEdge()
 		gl.LineWidth(1.0)
 	end
 	gl.DepthTest(true)
