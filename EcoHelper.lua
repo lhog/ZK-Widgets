@@ -87,7 +87,7 @@ end
 local scanInterval = 1 * Game.gameSpeed
 local scanForRemovalInterval = 10 * Game.gameSpeed --10 sec
 
-local minDistance = 200
+local minDistance = 300
 local minSqDistance = minDistance^2
 local minPoints = 2
 local minFeatureMetal = 8 --flea
@@ -129,8 +129,11 @@ local featureClusters = {}
 local E2M = 2 / 70 --solar ratio
 
 local featuresUpdated = false
+local clusterMetalUpdated = false
+
 local function UpdateFeatures(gf)
 	featuresUpdated = false
+	clusterMetalUpdated = false
 	for _, fID in ipairs(Spring.GetAllFeatures()) do
 		local metal, _, energy = Spring.GetFeatureResources(fID)
 		metal = metal + energy * E2M
@@ -171,13 +174,16 @@ local function UpdateFeatures(gf)
 			end
 
 			if knownFeatures[fID].metal ~= metal then
+				--Spring.Echo("knownFeatures[fID].metal ~= metal", metal)
 				if knownFeatures[fID].clID then
+					--Spring.Echo("knownFeatures[fID].clID")
 					local thisCluster = featureClusters[ knownFeatures[fID].clID ]
 					thisCluster.metal = thisCluster.metal - knownFeatures[fID].metal
 					if metal >= minFeatureMetal then
 						thisCluster.metal = thisCluster.metal + metal
 						knownFeatures[fID].metal = metal
-						--featuresUpdated = true
+						--Spring.Echo("clusterMetalUpdated = true", thisCluster.metal)
+						clusterMetalUpdated = true
 					else
 						UpdateFeatureNeighborsMatrix(fID, false, false, true)
 						knownFeatures[fID] = nil
@@ -243,7 +249,7 @@ local function ClusterizeFeatures(gf)
 
 	--TableEcho(featureNeighborsMatrix, "featureNeighborsMatrix")
 
-	local opticsObject = Optics.new(pointsTable, featureNeighborsMatrix, 3, benchmark)
+	local opticsObject = Optics.new(pointsTable, featureNeighborsMatrix, minPoints, benchmark)
 	benchmark:Enter("opticsObject:Run()")
 	opticsObject:Run()
 	benchmark:Leave("opticsObject:Run()")
@@ -275,8 +281,10 @@ local function ClusterizeFeatures(gf)
 			thisCluster.zmax = math.max(thisCluster.zmax, fInfo.z)
 
 			metal = metal + fInfo.metal
+			knownFeatures[fID].clID = i
 			unclusteredPoints[fID] = nil
 		end
+
 		thisCluster.metal = metal
 	end
 
@@ -407,7 +415,17 @@ local function ClustersToConvexHull()
 			}
 		end
 
-		featureConvexHulls[#featureConvexHulls + 1] = convexHull
+		local cx, cz, cy = 0, 0, 0
+		for i = 1, #convexHull do
+			local convexHullPoint = convexHull[i]
+			cx = cx + convexHullPoint.x
+			cz = cz + convexHullPoint.z
+			cy = math.max(cy, convexHullPoint.y)
+		end
+
+		convexHull.center = {x = cx/#convexHull, z = cz/#convexHull, y = cy + 1}
+
+		featureConvexHulls[fc] = convexHull
 
 		--[[
 		for i = 1, #convexHull do
@@ -827,6 +845,44 @@ local function DrawFeatureConvexHullEdge()
 	gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 end
 
+local drawFeatureClusterTextList
+local function DrawFeatureClusterText()
+	for i = 1, #featureConvexHulls do
+		gl.PushMatrix()
+
+		local center = featureConvexHulls[i].center
+
+		gl.Translate(center.x, center.y, center.z)
+		gl.Rotate(-90, 1, 0, 0)
+
+		local fontSize = 25
+
+		local metal = featureClusters[i].metal
+		--Spring.Echo(metal)
+		local metalText
+		if metal < 1000 then
+			metalText = tostring(metal) --exact number
+		elseif metal < 10000 then
+			metalText = string.format("%.1fK", math.floor(metal / 100) / 10) --4.5K
+		else
+			metalText = string.format("%.0fK", math.floor(metal / 1000)) --40K
+		end
+
+        local x100  = 100  / (100  + metal)
+        local x1000 = 1000 / (1000 + metal)
+        local r = 1 - x1000
+        local g = x1000 - x100
+        local b = x100
+
+		gl.Color(r, g, b, 1.0)
+		--gl.Rect(-200, -200, 200, 200)
+		gl.Text(metalText, 0, 0, fontSize, "cvo")
+
+
+		gl.PopMatrix()
+	end
+end
+
 local checkFrequency = 30
 local checkFrequencyBias = math.floor(checkFrequency / 2)
 
@@ -875,22 +931,6 @@ function widget:Update(dt)
 	color = 0.5 + 0.5 * (frame % checkFrequency - checkFrequency)/(checkFrequency - 1)
 	if color < 0 then color = 0 end
 	if color > 1 then color = 1 end
-
-	if featuresUpdated or drawFeatureConvexHullSolidList == nil then
-		if drawFeatureConvexHullSolidList then
-			gl.DeleteList(drawFeatureConvexHullSolidList)
-			drawFeatureConvexHullSolidList = nil
-		end
-
-		if drawFeatureConvexHullEdgeList then
-			gl.DeleteList(drawFeatureConvexHullEdgeList)
-			drawFeatureConvexHullEdgeList = nil
-		end
-
-
-		drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
-		drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
-	end
 end
 
 local waitIdlePeriod= 2 * 30 --x times second(s)
@@ -918,6 +958,33 @@ function widget:GameFrame(frame)
 			ClusterizeFeatures(frame)
 			ClustersToConvexHull()
 		end
+
+		if featuresUpdated or drawFeatureConvexHullSolidList == nil then
+			--Spring.Echo("featuresUpdated")
+			if drawFeatureConvexHullSolidList then
+				gl.DeleteList(drawFeatureConvexHullSolidList)
+				drawFeatureConvexHullSolidList = nil
+			end
+
+			if drawFeatureConvexHullEdgeList then
+				gl.DeleteList(drawFeatureConvexHullEdgeList)
+				drawFeatureConvexHullEdgeList = nil
+			end
+
+
+			drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
+			drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
+		end
+
+		if featuresUpdated or clusterMetalUpdated or drawFeatureClusterTextList == nil then
+			--Spring.Echo("clusterMetalUpdated")
+			if drawFeatureClusterTextList then
+				gl.DeleteList(drawFeatureClusterTextList)
+				drawFeatureClusterTextList = nil
+			end
+			drawFeatureClusterTextList = gl.CreateList(DrawFeatureClusterText)
+		end
+
 	end
 end
 
@@ -1017,6 +1084,7 @@ function widget:DrawWorld()
 
 	gl.DepthTest(false)
 	--gl.DepthTest(true)
+
 	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
 	if drawFeatureConvexHullSolidList then
 		gl.Color(ColorMul(color, reclaimColor))
@@ -1030,6 +1098,12 @@ function widget:DrawWorld()
 		gl.CallList(drawFeatureConvexHullEdgeList)
 		--DrawFeatureConvexHullEdge()
 		gl.LineWidth(1.0)
+	end
+
+
+	if drawFeatureClusterTextList then
+		gl.CallList(drawFeatureClusterTextList)
+		--DrawFeatureClusterText()
 	end
 
 	gl.DepthTest(true)
@@ -1047,6 +1121,9 @@ function widget:Shutdown()
 	end
 	if drawFeatureConvexHullEdgeList then
 		gl.DeleteList(drawFeatureConvexHullEdgeList)
+	end
+	if drawFeatureClusterTextList then
+		gl.DeleteList(drawFeatureClusterTextList)
 	end
 	benchmark:PrintAllStat()
 end
