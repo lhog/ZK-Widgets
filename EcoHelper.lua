@@ -25,6 +25,7 @@ local function UpdateTeamAndAllyTeamID()
 end
 
 
+local TableEcho = Spring.Utilities.TableEcho
 
 local iconTypes = VFS.Include("LuaUI/Configs/icontypes.lua")
 
@@ -86,16 +87,57 @@ end
 local scanInterval = 1 * Game.gameSpeed
 local scanForRemovalInterval = 10 * Game.gameSpeed --10 sec
 
+local minDistance = 200
+local minSqDistance = minDistance^2
+local minPoints = 2
+local minFeatureMetal = 8 --flea
+
 local knownFeatures = {}
-local featuresUpdated
+
+local featureNeighborsMatrix = {}
+local function UpdateFeatureNeighborsMatrix(fID, added, posChanged, removed)
+	local fInfo = knownFeatures[fID]
+
+	if added then
+		featureNeighborsMatrix[fID] = {}
+		for fID2, fInfo2 in pairs(knownFeatures) do
+			if fID2 ~= fID then --don't include self into featureNeighborsMatrix[][]
+				local sqDist = (fInfo.x - fInfo2.x)^2 + (fInfo.z - fInfo2.z)^2
+				if sqDist <= minSqDistance then
+					featureNeighborsMatrix[fID][fID2] = true
+					featureNeighborsMatrix[fID2][fID] = true
+				end
+			end
+		end
+	end
+
+	if removed then
+		for fID2, _ in pairs(featureNeighborsMatrix[fID]) do
+			featureNeighborsMatrix[fID2][fID] = nil
+			featureNeighborsMatrix[fID][fID2] = nil
+		end
+	end
+
+	if posChanged then
+		UpdateFeatureNeighborsMatrix(fID, false, false, true) --remove
+		UpdateFeatureNeighborsMatrix(fID, true, false, false) --add again
+	end
+end
+
+local featureClusters = {}
 
 local E2M = 2 / 70 --solar ratio
+
+local featuresUpdated = false
 local function UpdateFeatures(gf)
 	featuresUpdated = false
 	for _, fID in ipairs(Spring.GetAllFeatures()) do
-		if not knownFeatures[fID] then --first time seen
+		local metal, _, energy = Spring.GetFeatureResources(fID)
+		metal = metal + energy * E2M
+
+		if (not knownFeatures[fID]) and (metal >= minFeatureMetal) then --first time seen
 			knownFeatures[fID] = {}
-			knownFeatures[fID].lastScanned = -math.huge
+			knownFeatures[fID].lastScanned = gf
 
 			local fx, fy, fz = Spring.GetFeaturePosition(fID)
 			knownFeatures[fID].x = fx
@@ -106,7 +148,9 @@ local function UpdateFeatures(gf)
 			knownFeatures[fID].height = Spring.GetFeatureHeight(fID)
 			knownFeatures[fID].drawAlt = ((fy > 0 and fy) or 0) + knownFeatures[fID].height + 10
 
-			knownFeatures[fID].metal = 0
+			knownFeatures[fID].metal = metal
+
+			UpdateFeatureNeighborsMatrix(fID, true, false, false)
 			featuresUpdated = true
 		end
 
@@ -121,14 +165,25 @@ local function UpdateFeatures(gf)
 				knownFeatures[fID].z = fz
 
 				knownFeatures[fID].drawAlt = ((fy > 0 and fy) or 0) + knownFeatures[fID].height + 10
+
+				UpdateFeatureNeighborsMatrix(fID, false, true, false)
 				featuresUpdated = true
 			end
 
-			local metal, _, energy = Spring.GetFeatureResources(fID)
-			metal = metal + energy * E2M
 			if knownFeatures[fID].metal ~= metal then
-				knownFeatures[fID].metal = metal
-				featuresUpdated = true
+				if knownFeatures[fID].clID then
+					local thisCluster = featureClusters[ knownFeatures[fID].clID ]
+					thisCluster.metal = thisCluster.metal - knownFeatures[fID].metal
+					if metal >= minFeatureMetal then
+						thisCluster.metal = thisCluster.metal + metal
+						knownFeatures[fID].metal = metal
+						--featuresUpdated = true
+					else
+						UpdateFeatureNeighborsMatrix(fID, false, false, true)
+						knownFeatures[fID] = nil
+						featuresUpdated = true
+					end
+				end
 			end
 		end
 	end
@@ -137,8 +192,10 @@ local function UpdateFeatures(gf)
 
 		if fInfo.isGaia and Spring.ValidFeatureID(fID) == false then
 			--Spring.Echo("fInfo.isGaia and Spring.ValidFeatureID(fID) == false")
-			knownFeatures[fID] = nil
+
+			UpdateFeatureNeighborsMatrix(fID, false, false, true)
 			fInfo = nil
+			knownFeatures[fID] = nil
 			featuresUpdated = true
 		end
 
@@ -146,6 +203,8 @@ local function UpdateFeatures(gf)
 			local los = Spring.IsPosInLos(fInfo.x, fInfo.y, fInfo.z, myAllyTeamID)
 			if los then --this place has no feature, it's been moved or reclaimed or destroyed
 				--Spring.Echo("this place has no feature, it's been moved or reclaimed or destroyed")
+
+				UpdateFeatureNeighborsMatrix(fID, false, false, true)
 				fInfo = nil
 				knownFeatures[fID] = nil
 				featuresUpdated = true
@@ -158,114 +217,88 @@ local function UpdateFeatures(gf)
 	end
 end
 
-local minSqDistance = 170^2
+local Optics = VFS.Include("LuaUI/Widgets/libs/Optics.lua")
+local Benchmark = VFS.Include("LuaUI/Widgets/libs/Benchmark.lua")
+
+local benchmark = Benchmark.new()
+
 --local minRequiredForce = 1
-local minFeatureMetal = 8 --flea
 
-local featureClusters = {}
 local function ClusterizeFeatures(gf)
-	featureClusters = {}
+	benchmark:Enter("ClusterizeFeatures")
+	local pointsTable = {}
 
-	local sortedTable = {}
+	local unclusteredPoints  = {}
+
+	--Spring.Echo("#knownFeatures", #knownFeatures)
+
 	for fID, fInfo in pairs(knownFeatures) do
-		if fInfo.metal >= minFeatureMetal then
-			sortedTable[#sortedTable + 1] = {fInfo.metal, fID}
-		end
+		pointsTable[#pointsTable + 1] = {
+			x = fInfo.x,
+			z = fInfo.z,
+			fID = fID,
+		}
+		unclusteredPoints[fID] = true
 	end
 
-	table.sort(sortedTable, function(a,b) return a[1] > b[1] end)
-	--Spring.Echo("#sortedTable", #sortedTable)
+	--TableEcho(featureNeighborsMatrix, "featureNeighborsMatrix")
 
-	for i = 1, #sortedTable do
-		local metal1 = sortedTable[i][1]
-		local fID1 = sortedTable[i][2]
-		if not knownFeatures[fID1].clID then
-			local fx1, fz1 = knownFeatures[fID1].x, knownFeatures[fID1].z
+	local opticsObject = Optics.new(pointsTable, featureNeighborsMatrix, 3, benchmark)
+	benchmark:Enter("opticsObject:Run()")
+	opticsObject:Run()
+	benchmark:Leave("opticsObject:Run()")
 
-			featureClusters[#featureClusters + 1] = {}
-			knownFeatures[fID1].clID = #featureClusters
+	benchmark:Enter("opticsObject:Clusterize(minDistance)")
+	featureClusters = opticsObject:Clusterize(minDistance)
+	benchmark:Leave("opticsObject:Clusterize(minDistance)")
 
-			local thisCluster = {
-				members = {fID1},
-				xmin = fx1,
-				xmax = fx1,
-				zmin = fz1,
-				zmax = fz1,
-				metal = metal1,
-			}
+	--Spring.Echo("#featureClusters", #featureClusters)
 
-			local iter = 0
 
-			local goodDist = true
-			while goodDist do
-				iter = iter + 1
-				if iter > 1000 then
-					Spring.Log(widget:GetInfo().name, LOG.ERROR, "Stuck in goodDist, made more than 200 iterations")
-					break
-				end
-				local minDist = math.huge
-				local metalAddition = nil
-				local minDistIdx = nil
+	for i = 1, #featureClusters do
+		local thisCluster = featureClusters[i]
 
-				local txmin, txmax, tzmin, tzmax = thisCluster.xmin, thisCluster.xmax, thisCluster.zmin, thisCluster.zmax
-				for j = i + 1, #sortedTable do
-					local metal2 = sortedTable[j][1]
-					local fID2 = sortedTable[j][2]
-					if not knownFeatures[fID2].clID then
-						local fx2, fz2 = knownFeatures[fID2].x, knownFeatures[fID2].z
+		thisCluster.xmin = math.huge
+		thisCluster.xmax = -math.huge
+		thisCluster.zmin = math.huge
+		thisCluster.zmax = -math.huge
 
-						local dx, dz = 0, 0
 
-						if     fx2 > txmax then
-							dx = fx2 - txmax
-						elseif fx2 < txmin then
-							dx = fx2 - txmin
-						end
+		local metal = 0
+		for j = 1, #thisCluster.members do
+			local fID = thisCluster.members[j]
+			local fInfo = knownFeatures[fID]
 
-						if     fz2 > tzmax then
-							dz = fz2 - tzmax
-						elseif fz2 < tzmin then
-							dz = fz2 - tzmin
-						end
+			thisCluster.xmin = math.min(thisCluster.xmin, fInfo.x)
+			thisCluster.xmax = math.max(thisCluster.xmax, fInfo.x)
+			thisCluster.zmin = math.min(thisCluster.zmin, fInfo.z)
+			thisCluster.zmax = math.max(thisCluster.zmax, fInfo.z)
 
-						local sqDist = dx^2 + dz^2
-
-						if sqDist <= minSqDistance and sqDist < minDist then
-							--Spring.Echo("minDist", sqDist)
-							minDist = sqDist
-							metalAddition = metal2
-							minDistIdx = j
-						end
-					end
-				end
-
-				if minDistIdx then
-					--Spring.Echo("minDist", minDist, "#featureClusters", #featureClusters)
-					local fIDMax = sortedTable[minDistIdx][2]
-
-					knownFeatures[fIDMax].clID = #featureClusters
-					thisCluster.members[#thisCluster.members + 1] = fIDMax
-
-					thisCluster.metal = thisCluster.metal + metalAddition
-
-					local fxM, fzM = knownFeatures[fIDMax].x, knownFeatures[fIDMax].z
-
-					txmin = math.min(txmin, fxM)
-					txmax = math.max(txmax, fxM)
-					tzmin = math.min(tzmin, fzM)
-					tzmax = math.max(tzmax, fzM)
-
-					thisCluster.xmin, thisCluster.xmax, thisCluster.zmin, thisCluster.zmax = txmin, txmax, tzmin, tzmax
-
-				end
-				goodDist = (minDistIdx ~= nil)
-				--ePrintEx({thisCluster=thisCluster})
-			end
-
-			featureClusters[#featureClusters] = thisCluster
+			metal = metal + fInfo.metal
+			unclusteredPoints[fID] = nil
 		end
+		thisCluster.metal = metal
 	end
+
+	for fID, _ in pairs(unclusteredPoints) do --add Singlepoint featureClusters
+		local fInfo = knownFeatures[fID]
+		local thisCluster = {}
+
+		thisCluster.members = {fID}
+		thisCluster.metal = fInfo.metal
+
+		thisCluster.xmin = fInfo.x
+		thisCluster.xmax = fInfo.x
+		thisCluster.zmin = fInfo.z
+		thisCluster.zmax = fInfo.z
+
+		featureClusters[#featureClusters + 1] = thisCluster
+		knownFeatures[fID].clID = #featureClusters
+	end
+
+	benchmark:Leave("ClusterizeFeatures")
 end
+
 
 --- JARVIS MARCH
 -- https://github.com/kennyledet/Algorithm-Implementations/blob/master/Convex_hull/Lua/Yonaba/convex_hull.lua
@@ -326,6 +359,7 @@ local minDim = 100
 local featureConvexHulls = {}
 local function ClustersToConvexHull()
 	featureConvexHulls = {}
+	--Spring.Echo("#featureClusters", #featureClusters)
 	for fc = 1, #featureClusters do
 		local clusterPoints = {}
 		for fcm = 1, #featureClusters[fc].members do
@@ -340,8 +374,10 @@ local function ClustersToConvexHull()
 
 		local convexHull
 		if #clusterPoints >= 3 then
+			--Spring.Echo("#clusterPoints >= 3")
 			convexHull = JarvisMarch(clusterPoints)
 		else
+			--Spring.Echo("not #clusterPoints >= 3")
 			local thisCluster = featureClusters[fc]
 
 			local xmin, xmax, zmin, zmax = thisCluster.xmin, thisCluster.xmax, thisCluster.zmin, thisCluster.zmax
@@ -372,6 +408,7 @@ local function ClustersToConvexHull()
 		end
 
 		featureConvexHulls[#featureConvexHulls + 1] = convexHull
+
 		--[[
 		for i = 1, #convexHull do
 			Spring.MarkerAddPoint(convexHull[i].x, convexHull[i].y, convexHull[i].z, string.format("C%i(%i)", fc, i))
@@ -379,6 +416,7 @@ local function ClustersToConvexHull()
 		]]--
 	end
 end
+
 
 --local reclaimColor = (1.0, 0.2, 1.0, 0.7);
 local reclaimColor = {1.0, 0.2, 1.0, 0.3}
@@ -843,10 +881,13 @@ function widget:Update(dt)
 			gl.DeleteList(drawFeatureConvexHullSolidList)
 			drawFeatureConvexHullSolidList = nil
 		end
+
 		if drawFeatureConvexHullEdgeList then
 			gl.DeleteList(drawFeatureConvexHullEdgeList)
 			drawFeatureConvexHullEdgeList = nil
 		end
+
+
 		drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
 		drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
 	end
@@ -983,7 +1024,6 @@ function widget:DrawWorld()
 		--DrawFeatureConvexHullSolid()
 	end
 
-
 	if drawFeatureConvexHullEdgeList then
 		gl.LineWidth(6.0 / cameraScale)
 		gl.Color(ColorMul(color, reclaimEdgeColor))
@@ -991,6 +1031,7 @@ function widget:DrawWorld()
 		--DrawFeatureConvexHullEdge()
 		gl.LineWidth(1.0)
 	end
+
 	gl.DepthTest(true)
 
 end
@@ -1001,4 +1042,11 @@ function widget:Shutdown()
 			Spring.SendLuaRulesMsg('sethaven|' .. heavenZone.x .. '|' .. 0 .. '|' .. heavenZone.z )
 		end
 	end
+	if drawFeatureConvexHullSolidList then
+		gl.DeleteList(drawFeatureConvexHullSolidList)
+	end
+	if drawFeatureConvexHullEdgeList then
+		gl.DeleteList(drawFeatureConvexHullEdgeList)
+	end
+	benchmark:PrintAllStat()
 end
