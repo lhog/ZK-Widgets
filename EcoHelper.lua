@@ -331,36 +331,43 @@ local function isCCW(p, q, r) return signedArea(p, q, r) < 0 end
 -- points  : an array of points
 -- returns : the convex hull as an array of points
 local function JarvisMarch(points)
-  -- We need at least 3 points
-  local numPoints = #points
-  if numPoints < 3 then return end
+	benchmark:Enter("JarvisMarch")
+	-- We need at least 3 points
+	local numPoints = #points
+	if numPoints < 3 then return end
 
-  -- Find the left-most point
-  local leftMostPointIndex = 1
-  for i = 1, numPoints do
-    if points[i].x < points[leftMostPointIndex].x then
-      leftMostPointIndex = i
-    end
-  end
+	-- Find the left-most point
+	benchmark:Enter("JarvisMarch leftMostPointIndex")
+	local leftMostPointIndex = 1
+		for i = 1, numPoints do
+		if points[i].x < points[leftMostPointIndex].x then
+			leftMostPointIndex = i
+		end
+	end
+	benchmark:Leave("JarvisMarch leftMostPointIndex")
 
-  local p = leftMostPointIndex
-  local hull = {} -- The convex hull to be returned
+	local p = leftMostPointIndex
+	local hull = {} -- The convex hull to be returned
 
-  -- Process CCW from the left-most point to the start point
-  repeat
-    -- Find the next point q such that (p, i, q) is CCW for all i
-    q = points[p + 1] and p + 1 or 1
-    for i = 1, numPoints, 1 do
-      if isCCW(points[p], points[i], points[q]) then q = i end
-    end
+	-- Process CCW from the left-most point to the start point
+	benchmark:Enter("JarvisMarch repeat")
+	repeat
+		-- Find the next point q such that (p, i, q) is CCW for all i
+		q = points[p + 1] and p + 1 or 1
+		for i = 1, numPoints, 1 do
+		  if isCCW(points[p], points[i], points[q]) then q = i end
+		end
 
-    table.insert(hull, points[q]) -- Save q to the hull
-    p = q  -- p is now q for the next iteration
-  until (p == leftMostPointIndex)
+		table.insert(hull, points[q]) -- Save q to the hull
+		p = q  -- p is now q for the next iteration
+	until (p == leftMostPointIndex)
+	benchmark:Leave("JarvisMarch repeat")
 
-  return hull
+	benchmark:Leave("JarvisMarch")
+	return hull
 end
 --- JARVIS MARCH
+
 
 local minDim = 100
 
@@ -965,9 +972,9 @@ function widget:Update(dt)
 		if featuresUpdated then
 			ClusterizeFeatures()
 			ClustersToConvexHull()
-			Spring.Echo("LuaUI memsize before = ", collectgarbage("count"))
+			--Spring.Echo("LuaUI memsize before = ", collectgarbage("count"))
 			collectgarbage("collect")
-			Spring.Echo("LuaUI memsize after = ", collectgarbage("count"))
+			--Spring.Echo("LuaUI memsize after = ", collectgarbage("count"))
 			benchmark:PrintAllStat()
 		end
 
