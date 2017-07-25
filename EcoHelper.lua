@@ -230,7 +230,7 @@ local benchmark = Benchmark.new()
 
 --local minRequiredForce = 1
 
-local function ClusterizeFeatures(gf)
+local function ClusterizeFeatures()
 	benchmark:Enter("ClusterizeFeatures")
 	local pointsTable = {}
 
@@ -366,6 +366,7 @@ local minDim = 100
 
 local featureConvexHulls = {}
 local function ClustersToConvexHull()
+	benchmark:Enter("ClustersToConvexHull")
 	featureConvexHulls = {}
 	--Spring.Echo("#featureClusters", #featureClusters)
 	for fc = 1, #featureClusters do
@@ -423,6 +424,22 @@ local function ClustersToConvexHull()
 			cy = math.max(cy, convexHullPoint.y)
 		end
 
+		local totalArea = 0
+		local pt1 = convexHull[1]
+		for i = 2, #convexHull - 1 do
+			local pt2 = convexHull[i]
+			local pt3 = convexHull[i + 1]
+			--Heron formula to get triangle area
+			local a = math.sqrt((pt2.x - pt1.x)^2 + (pt2.z - pt1.z)^2)
+			local b = math.sqrt((pt3.x - pt2.x)^2 + (pt3.z - pt2.z)^2)
+			local c = math.sqrt((pt3.x - pt1.x)^2 + (pt3.z - pt1.z)^2)
+			local p = (a + b + c)/2 --half perimeter
+
+			local triangleArea = math.sqrt(p * (p - a) * (p - b) * (p - c))
+			totalArea = totalArea + triangleArea
+		end
+
+		convexHull.area = totalArea
 		convexHull.center = {x = cx/#convexHull, z = cz/#convexHull, y = cy + 1}
 
 		featureConvexHulls[fc] = convexHull
@@ -432,6 +449,7 @@ local function ClustersToConvexHull()
 			Spring.MarkerAddPoint(convexHull[i].x, convexHull[i].y, convexHull[i].z, string.format("C%i(%i)", fc, i))
 		end
 		]]--
+		benchmark:Leave("ClustersToConvexHull")
 	end
 end
 
@@ -456,7 +474,7 @@ local function ColorMul(scalar, actionColor)
 end
 
 function widget:Initialize()
-	CheckSpecState(widgetName)
+	--CheckSpecState(widgetName)
 	curModID = string.upper(Game.modShortName or "")
 	if ( curModID ~= "ZK" ) then
 		widgetHandler:RemoveWidget()
@@ -845,6 +863,9 @@ local function DrawFeatureConvexHullEdge()
 	gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 end
 
+local fontSize = 35 --font size for minDim sized convex Hull
+local fontSizeMax = 250
+
 local drawFeatureClusterTextList
 local function DrawFeatureClusterText()
 	for i = 1, #featureConvexHulls do
@@ -856,6 +877,9 @@ local function DrawFeatureClusterText()
 		gl.Rotate(-90, 1, 0, 0)
 
 		local fontSize = 25
+		local area = featureConvexHulls[i].area
+		fontSize = math.sqrt(area) * fontSize / minDim
+		fontSize = math.min(fontSize, fontSizeMax)
 
 		local metal = featureClusters[i].metal
 		--Spring.Echo(metal)
@@ -886,7 +910,10 @@ end
 local checkFrequency = 30
 local checkFrequencyBias = math.floor(checkFrequency / 2)
 
+local cumDt = 0
 function widget:Update(dt)
+	benchmark:Enter("Update(dt)")
+	cumDt = cumDt + dt
 	local cx, cy, cz = Spring.GetCameraPosition()
 
 	local desc, w = Spring.TraceScreenRay(screenx / 2, screeny / 2, true)
@@ -931,6 +958,51 @@ function widget:Update(dt)
 	color = 0.5 + 0.5 * (frame % checkFrequency - checkFrequency)/(checkFrequency - 1)
 	if color < 0 then color = 0 end
 	if color > 1 then color = 1 end
+
+	if cumDt >= 1.0 then
+		UpdateFeatures(frame)
+		--Spring.Echo("featuresUpdated", featuresUpdated)
+		if featuresUpdated then
+			ClusterizeFeatures()
+			ClustersToConvexHull()
+			Spring.Echo("LuaUI memsize before = ", collectgarbage("count"))
+			collectgarbage("collect")
+			Spring.Echo("LuaUI memsize after = ", collectgarbage("count"))
+			benchmark:PrintAllStat()
+		end
+
+		if featuresUpdated or drawFeatureConvexHullSolidList == nil then
+			benchmark:Enter("featuresUpdated or drawFeatureConvexHullSolidList == nil")
+			--Spring.Echo("featuresUpdated")
+			if drawFeatureConvexHullSolidList then
+				gl.DeleteList(drawFeatureConvexHullSolidList)
+				drawFeatureConvexHullSolidList = nil
+			end
+
+			if drawFeatureConvexHullEdgeList then
+				gl.DeleteList(drawFeatureConvexHullEdgeList)
+				drawFeatureConvexHullEdgeList = nil
+			end
+
+
+			drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
+			drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
+			benchmark:Leave("featuresUpdated or drawFeatureConvexHullSolidList == nil")
+		end
+
+		if featuresUpdated or clusterMetalUpdated or drawFeatureClusterTextList == nil then
+			benchmark:Enter("featuresUpdated or clusterMetalUpdated or drawFeatureClusterTextList == nil")
+			--Spring.Echo("clusterMetalUpdated")
+			if drawFeatureClusterTextList then
+				gl.DeleteList(drawFeatureClusterTextList)
+				drawFeatureClusterTextList = nil
+			end
+			drawFeatureClusterTextList = gl.CreateList(DrawFeatureClusterText)
+			benchmark:Leave("featuresUpdated or clusterMetalUpdated or drawFeatureClusterTextList == nil")
+		end
+		cumDt = 0
+	end
+	benchmark:Leave("Update(dt)")
 end
 
 local waitIdlePeriod= 2 * 30 --x times second(s)
@@ -951,40 +1023,6 @@ function widget:GameFrame(frame)
 	elseif frameMod == 0 then
 		--Spring.Echo("SetEcoHighPriority")
 		SetEcoHighPriority()
-
-		UpdateFeatures(frame)
-		--Spring.Echo("featuresUpdated", featuresUpdated)
-		if featuresUpdated then
-			ClusterizeFeatures(frame)
-			ClustersToConvexHull()
-		end
-
-		if featuresUpdated or drawFeatureConvexHullSolidList == nil then
-			--Spring.Echo("featuresUpdated")
-			if drawFeatureConvexHullSolidList then
-				gl.DeleteList(drawFeatureConvexHullSolidList)
-				drawFeatureConvexHullSolidList = nil
-			end
-
-			if drawFeatureConvexHullEdgeList then
-				gl.DeleteList(drawFeatureConvexHullEdgeList)
-				drawFeatureConvexHullEdgeList = nil
-			end
-
-
-			drawFeatureConvexHullSolidList = gl.CreateList(DrawFeatureConvexHullSolid)
-			drawFeatureConvexHullEdgeList = gl.CreateList(DrawFeatureConvexHullEdge)
-		end
-
-		if featuresUpdated or clusterMetalUpdated or drawFeatureClusterTextList == nil then
-			--Spring.Echo("clusterMetalUpdated")
-			if drawFeatureClusterTextList then
-				gl.DeleteList(drawFeatureClusterTextList)
-				drawFeatureClusterTextList = nil
-			end
-			drawFeatureClusterTextList = gl.CreateList(DrawFeatureClusterText)
-		end
-
 	end
 end
 
