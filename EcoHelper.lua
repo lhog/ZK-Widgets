@@ -861,7 +861,7 @@ local function DrawFeatureClusterText()
 		--Spring.Echo(metal)
 		local metalText
 		if metal < 1000 then
-			metalText = tostring(metal) --exact number
+			metalText = string.format("%.0f", metal) --exact number
 		elseif metal < 10000 then
 			metalText = string.format("%.1fK", math.floor(metal / 100) / 10) --4.5K
 		else
@@ -876,7 +876,7 @@ local function DrawFeatureClusterText()
 
 		gl.Color(r, g, b, 1.0)
 		--gl.Rect(-200, -200, 200, 200)
-		gl.Text(metalText, 0, 0, fontSize, "cvo")
+		gl.Text(metalText, 0, 0, fontSize, "cv")
 
 
 		gl.PopMatrix()
