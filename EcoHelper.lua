@@ -440,7 +440,7 @@ local function ColorMul(scalar, actionColor)
 end
 
 function widget:Initialize()
-	--CheckSpecState(widgetName)
+	CheckSpecState(widgetName)
 	curModID = string.upper(Game.modShortName or "")
 	if ( curModID ~= "ZK" ) then
 		widgetHandler:RemoveWidget()
@@ -829,7 +829,7 @@ local function DrawFeatureConvexHullEdge()
 	gl.PolygonMode(GL.FRONT_AND_BACK, GL.FILL)
 end
 
-local fontSize = 35 --font size for minDim sized convex Hull
+local fontSizeMin = 40 --font size for minDim sized convex Hull
 local fontSizeMax = 250
 
 local drawFeatureClusterTextList
@@ -845,7 +845,9 @@ local function DrawFeatureClusterText()
 		local fontSize = 25
 		local area = featureConvexHulls[i].area
 		fontSize = math.sqrt(area) * fontSize / minDim
+		fontSize = math.max(fontSize, fontSizeMin)
 		fontSize = math.min(fontSize, fontSizeMax)
+
 
 		local metal = featureClusters[i].metal
 		--Spring.Echo(metal)
