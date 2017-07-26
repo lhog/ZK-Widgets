@@ -15,6 +15,24 @@ function widget:GetInfo()
   }
 end
 
+--[[
+local widgetEnabled = true
+
+options_path = "Settings/Interface/" .. widgetName
+options_order = { "enabled", "showidle", "showeco", "showwreckfields" }
+options =
+{
+	enabled = {
+		name = "Enable widget",
+		type = "button",
+		value = true,
+		OnChange = function(self)
+			widgetEnabled = self.value
+		end
+	}
+}
+]]--
+
 local screenx, screeny
 
 local myTeamID
@@ -307,67 +325,7 @@ local function ClusterizeFeatures()
 	benchmark:Leave("ClusterizeFeatures")
 end
 
-
---- JARVIS MARCH
--- https://github.com/kennyledet/Algorithm-Implementations/blob/master/Convex_hull/Lua/Yonaba/convex_hull.lua
-
--- Convex hull algorithms implementation
--- See : http://en.wikipedia.org/wiki/Convex_hull
-
--- Calculates the signed area
-local function signedArea(p, q, r)
-  local cross = (q.z - p.z) * (r.x - q.x)
-              - (q.x - p.x) * (r.z - q.z)
-  return cross
-end
-
--- Checks if points p, q, r are oriented counter-clockwise
-local function isCCW(p, q, r) return signedArea(p, q, r) < 0 end
-
--- Returns the convex hull using Jarvis' Gift wrapping algorithm).
--- It expects an array of points as input. Each point is defined
--- as : {x = <value>, y = <value>}.
--- See : http://en.wikipedia.org/wiki/Gift_wrapping_algorithm
--- points  : an array of points
--- returns : the convex hull as an array of points
-local function JarvisMarch(points)
-	benchmark:Enter("JarvisMarch")
-	-- We need at least 3 points
-	local numPoints = #points
-	if numPoints < 3 then return end
-
-	-- Find the left-most point
-	benchmark:Enter("JarvisMarch leftMostPointIndex")
-	local leftMostPointIndex = 1
-		for i = 1, numPoints do
-		if points[i].x < points[leftMostPointIndex].x then
-			leftMostPointIndex = i
-		end
-	end
-	benchmark:Leave("JarvisMarch leftMostPointIndex")
-
-	local p = leftMostPointIndex
-	local hull = {} -- The convex hull to be returned
-
-	-- Process CCW from the left-most point to the start point
-	benchmark:Enter("JarvisMarch repeat")
-	repeat
-		-- Find the next point q such that (p, i, q) is CCW for all i
-		q = points[p + 1] and p + 1 or 1
-		for i = 1, numPoints, 1 do
-		  if isCCW(points[p], points[i], points[q]) then q = i end
-		end
-
-		table.insert(hull, points[q]) -- Save q to the hull
-		p = q  -- p is now q for the next iteration
-	until (p == leftMostPointIndex)
-	benchmark:Leave("JarvisMarch repeat")
-
-	benchmark:Leave("JarvisMarch")
-	return hull
-end
---- JARVIS MARCH
-
+local ConvexHull = VFS.Include("LuaUI/Widgets/libs/ConvexHull.lua")
 
 local minDim = 100
 
@@ -391,7 +349,8 @@ local function ClustersToConvexHull()
 		local convexHull
 		if #clusterPoints >= 3 then
 			--Spring.Echo("#clusterPoints >= 3")
-			convexHull = JarvisMarch(clusterPoints)
+			--convexHull = ConvexHull.JarvisMarch(clusterPoints, benchmark)
+			convexHull = ConvexHull.MonotoneChain(clusterPoints, benchmark) --twice faster
 		else
 			--Spring.Echo("not #clusterPoints >= 3")
 			local thisCluster = featureClusters[fc]
@@ -451,11 +410,11 @@ local function ClustersToConvexHull()
 
 		featureConvexHulls[fc] = convexHull
 
-		--[[
+--[[
 		for i = 1, #convexHull do
 			Spring.MarkerAddPoint(convexHull[i].x, convexHull[i].y, convexHull[i].z, string.format("C%i(%i)", fc, i))
 		end
-		]]--
+]]--
 		benchmark:Leave("ClustersToConvexHull")
 	end
 end
@@ -919,7 +878,6 @@ local checkFrequencyBias = math.floor(checkFrequency / 2)
 
 local cumDt = 0
 function widget:Update(dt)
-	benchmark:Enter("Update(dt)")
 	cumDt = cumDt + dt
 	local cx, cy, cz = Spring.GetCameraPosition()
 
@@ -965,17 +923,37 @@ function widget:Update(dt)
 	color = 0.5 + 0.5 * (frame % checkFrequency - checkFrequency)/(checkFrequency - 1)
 	if color < 0 then color = 0 end
 	if color > 1 then color = 1 end
+end
 
-	if cumDt >= 1.0 then
+local waitIdlePeriod= 2 * 30 --x times second(s)
+
+function widget:GameFrame(frame)
+	local frameMod = frame % checkFrequency
+	if frameMod == checkFrequencyBias then
+		flashIdleWorkers = false
+		for uId, info in pairs(idleList) do
+			if info and info.gameFrame and frame >= info.gameFrame + waitIdlePeriod then
+				idleList[uId].flash = true
+				flashIdleWorkers = true
+			else
+				idleList[uId].flash = false
+			end
+		end
+		CheckAndSetFlashMetalExcess(frame)
+	elseif frameMod == 0 then
+		--Spring.Echo("SetEcoHighPriority")
+		SetEcoHighPriority()
+
+		benchmark:Enter("GameFrame UpdateFeatures")
 		UpdateFeatures(frame)
 		--Spring.Echo("featuresUpdated", featuresUpdated)
 		if featuresUpdated then
 			ClusterizeFeatures()
 			ClustersToConvexHull()
 			--Spring.Echo("LuaUI memsize before = ", collectgarbage("count"))
-			collectgarbage("collect")
+			--collectgarbage("collect")
 			--Spring.Echo("LuaUI memsize after = ", collectgarbage("count"))
-			benchmark:PrintAllStat()
+			--benchmark:PrintAllStat()
 		end
 
 		if featuresUpdated or drawFeatureConvexHullSolidList == nil then
@@ -1007,29 +985,7 @@ function widget:Update(dt)
 			drawFeatureClusterTextList = gl.CreateList(DrawFeatureClusterText)
 			benchmark:Leave("featuresUpdated or clusterMetalUpdated or drawFeatureClusterTextList == nil")
 		end
-		cumDt = 0
-	end
-	benchmark:Leave("Update(dt)")
-end
-
-local waitIdlePeriod= 2 * 30 --x times second(s)
-
-function widget:GameFrame(frame)
-	local frameMod = frame % checkFrequency
-	if frameMod == checkFrequencyBias then
-		flashIdleWorkers = false
-		for uId, info in pairs(idleList) do
-			if info and info.gameFrame and frame >= info.gameFrame + waitIdlePeriod then
-				idleList[uId].flash = true
-				flashIdleWorkers = true
-			else
-				idleList[uId].flash = false
-			end
-		end
-		CheckAndSetFlashMetalExcess(frame)
-	elseif frameMod == 0 then
-		--Spring.Echo("SetEcoHighPriority")
-		SetEcoHighPriority()
+		benchmark:Leave("GameFrame UpdateFeatures")
 	end
 end
 

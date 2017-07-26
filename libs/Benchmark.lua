@@ -8,12 +8,12 @@ function Benchmark.new()
 			num = {},
 
 			Enter = function (self, name)
-				Spring.Echo("Entered", name)
+				--Spring.Echo("Entered", name)
 				self.timer[name] = Spring.GetTimer()
 			end,
 
 			Leave = function (self, name)
-				Spring.Echo("Left", name)
+				--Spring.Echo("Left", name)
 				self.cumTime[name] = (self.cumTime[name] or 0) + Spring.DiffTimers(Spring.GetTimer(), self.timer[name] , true)
 				self.num[name] = (self.num[name] or 0) + 1
 			end,
