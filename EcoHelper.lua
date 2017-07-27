@@ -42,6 +42,9 @@ local function UpdateTeamAndAllyTeamID()
 	myAllyTeamID = Spring.GetMyAllyTeamID()
 end
 
+local Benchmark = VFS.Include("LuaUI/Widgets/libs/Benchmark.lua")
+local benchmark = Benchmark.new()
+
 
 local TableEcho = Spring.Utilities.TableEcho
 
@@ -150,8 +153,10 @@ local featuresUpdated = false
 local clusterMetalUpdated = false
 
 local function UpdateFeatures(gf)
+	benchmark:Enter("UpdateFeatures")
 	featuresUpdated = false
 	clusterMetalUpdated = false
+	benchmark:Enter("UpdateFeatures 1loop")
 	for _, fID in ipairs(Spring.GetAllFeatures()) do
 		local metal, _, energy = Spring.GetFeatureResources(fID)
 		metal = metal + energy * E2M
@@ -211,7 +216,9 @@ local function UpdateFeatures(gf)
 			end
 		end
 	end
+	benchmark:Leave("UpdateFeatures 1loop")
 
+	benchmark:Enter("UpdateFeatures 2loop")
 	for fID, fInfo in pairs(knownFeatures) do
 
 		if fInfo.isGaia and Spring.ValidFeatureID(fID) == false then
@@ -239,12 +246,11 @@ local function UpdateFeatures(gf)
 			knownFeatures[fID].clID = nil
 		end
 	end
+	benchmark:Leave("UpdateFeatures 2loop")
+	benchmark:Leave("UpdateFeatures")
 end
 
 local Optics = VFS.Include("LuaUI/Widgets/libs/Optics.lua")
-local Benchmark = VFS.Include("LuaUI/Widgets/libs/Benchmark.lua")
-
-local benchmark = Benchmark.new()
 
 --local minRequiredForce = 1
 
@@ -336,6 +342,7 @@ local function ClustersToConvexHull()
 	--Spring.Echo("#featureClusters", #featureClusters)
 	for fc = 1, #featureClusters do
 		local clusterPoints = {}
+		benchmark:Enter("ClustersToConvexHull 1st Part")
 		for fcm = 1, #featureClusters[fc].members do
 			local fID = featureClusters[fc].members[fcm]
 			clusterPoints[#clusterPoints + 1] = {
@@ -345,7 +352,12 @@ local function ClustersToConvexHull()
 			}
 			--Spring.MarkerAddPoint(knownFeatures[fID].x, 0, knownFeatures[fID].z, string.format("%i(%i)", fc, fcm))
 		end
+		benchmark:Leave("ClustersToConvexHull 1st Part")
 
+		--- TODO perform pruning as described in the article below, if convex hull algo will start to choke out
+		-- http://mindthenerd.blogspot.ru/2012/05/fastest-convex-hull-algorithm-ever.html
+
+		benchmark:Enter("ClustersToConvexHull 2nd Part")
 		local convexHull
 		if #clusterPoints >= 3 then
 			--Spring.Echo("#clusterPoints >= 3")
@@ -389,7 +401,9 @@ local function ClustersToConvexHull()
 			cz = cz + convexHullPoint.z
 			cy = math.max(cy, convexHullPoint.y)
 		end
+		benchmark:Leave("ClustersToConvexHull 2nd Part")
 
+		benchmark:Enter("ClustersToConvexHull 3rd Part")
 		local totalArea = 0
 		local pt1 = convexHull[1]
 		for i = 2, #convexHull - 1 do
@@ -404,6 +418,7 @@ local function ClustersToConvexHull()
 			local triangleArea = math.sqrt(p * (p - a) * (p - b) * (p - c))
 			totalArea = totalArea + triangleArea
 		end
+		benchmark:Leave("ClustersToConvexHull 3rd Part")
 
 		convexHull.area = totalArea
 		convexHull.center = {x = cx/#convexHull, z = cz/#convexHull, y = cy + 1}
