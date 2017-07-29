@@ -68,6 +68,68 @@ local function ToggleIdle()
 	end
 end
 
+
+local stateCommands = {
+	[CMD.ONOFF] = true,
+	[CMD.FIRE_STATE] = true,
+	[CMD.MOVE_STATE] = true,
+	[CMD.REPEAT] = true,
+	[CMD.CLOAK] = true,
+	[CMD.STOCKPILE] = true,
+	[CMD.TRAJECTORY] = true,
+	[CMD.IDLEMODE] = true,
+	[CMD_GLOBAL_BUILD] = true,
+	[CMD_STEALTH] = true,
+	[CMD_CLOAK_SHIELD] = true,
+	[CMD_UNIT_FLOAT_STATE] = true,
+	[CMD_PRIORITY] = true,
+	[CMD_MISC_PRIORITY] = true,
+	[CMD_RETREAT] = true,
+	[CMD_UNIT_BOMBER_DIVE_STATE] = true,
+	[CMD_AP_FLY_STATE] = true,
+	[CMD_AP_AUTOREPAIRLEVEL] = true,
+	[CMD_UNIT_SET_TARGET] = true,
+	[CMD_UNIT_CANCEL_TARGET] = true,
+	[CMD_UNIT_SET_TARGET_CIRCLE] = true,
+	[CMD_ABANDON_PW] = true,
+	[CMD_RECALL_DRONES] = true,
+	[CMD_UNIT_KILL_SUBORDINATES] = true,
+	[CMD_UNIT_AI] = true,
+	[CMD_WANT_CLOAK] = true,
+	[CMD_DONT_FIRE_AT_RADAR] = true,
+	[CMD_AIR_STRAFE] = true,
+	[CMD_PREVENT_OVERKILL] = true,
+	[CMD_SELECTION_RANK] = true,
+	[CMD.SET_WANTED_MAX_SPEED] = true,
+}
+
+local energyUnitDefs = {
+	[UnitDefNames["energywind"].id] = true,
+	[UnitDefNames["energysolar"].id] = true,
+	[UnitDefNames["energygeo"].id] = true,
+	[UnitDefNames["energyfusion"].id] = true,
+}
+local storageUnitDef = UnitDefNames["staticstorage"].id
+local mexUnitDefs = UnitDefNames["staticmex"].id
+local caretakerUnitDef = UnitDefNames["staticcon"].id
+local caretakerBuildRange = UnitDefs[caretakerUnitDef].buildDistance
+
+local factoriesAndHubs = {
+	[UnitDefNames["factoryamph"].id] = true,
+	[UnitDefNames["factorycloak"].id] = true,
+	[UnitDefNames["factorygunship"].id] = true,
+	[UnitDefNames["factoryhover"].id] = true,
+	[UnitDefNames["factoryjump"].id] = true,
+	[UnitDefNames["factoryplane"].id] = true,
+	[UnitDefNames["factoryshield"].id] = true,
+	[UnitDefNames["factoryship"].id] = true,
+	[UnitDefNames["factoryspider"].id] = true,
+	[UnitDefNames["factorytank"].id] = true,
+	[UnitDefNames["factoryveh"].id] = true,
+	[UnitDefNames["striderhub"].id] = true,
+}
+
+
 local heavenRadius = 160
 local heavenRadiusSq = heavenRadius * heavenRadius
 local heavenZones = {}
@@ -75,6 +137,7 @@ local heavenZones = {}
 local function FindNearestHeavenZone(x, z)
 	local minZoneID = nil
 	local minZoneDist = math.huge
+
 	for hash, heavenZone in pairs(heavenZones) do
 		local DistSq = (heavenZone.x - x)^2 + (heavenZone.z - z)^2
 		if (DistSq <= heavenRadiusSq) and (DistSq < minZoneDist) then
@@ -589,14 +652,13 @@ local energyUnitDefs = {
 	[UnitDefNames["energygeo"].id] = true,
 	[UnitDefNames["energyfusion"].id] = true,
 }
-local storageUnitDef = UnitDefNames["staticstorage"].id
-local mexUnitDefs = UnitDefNames["staticmex"].id
-local caretakerUnitDef = UnitDefNames["staticcon"].id
+
 
 local energyUnitsUnderConstruction = {}
 local storageUnitsUnderConstruction = {}
 local mexUnitsUnderConstruction = {}
 local caretakerUnitsUnderConstruction = {}
+
 
 function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOptions)
 	--if idleList[unitID] and	(cmdID<0 or idleCancelCommands[cmdID]) then
@@ -646,18 +708,29 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 		if caretakerUnitDef == unitDefID then
 			local x, y, z = Spring.GetUnitPosition(unitID)
 
-			local minZoneID = FindNearestHeavenZone(x, z)
-			--Spring.Echo("minZoneID", minZoneID)
-			if minZoneID == nil then
-				--Spring.Echo("UnitFinished sethaven", unitID)
-				Spring.SendLuaRulesMsg('sethaven|' .. x .. '|' .. y .. '|' .. z )
-				local hash = z + x * mapSizeZ
-				heavenZones[hash] = {
-					thisWidget = true,
-					unitID = unitID,
-					x = x,
-					z = z,
-				}
+			local nearbyFac = false
+			local aroundUnits = Spring.GetUnitsInCylinder(x, z, caretakerBuildRange + 80)
+			for i = 1, #aroundUnits do
+				local unitID = aroundUnits[i]
+				if factoriesAndHubs[Spring.GetUnitDefID(unitID)] then
+					nearbyFac = true
+				end
+			end
+
+			if not nearbyFac then
+				local minZoneID = FindNearestHeavenZone(x, z)
+				--Spring.Echo("minZoneID", minZoneID)
+				if minZoneID == nil then
+					--Spring.Echo("UnitFinished sethaven", unitID)
+					Spring.SendLuaRulesMsg('sethaven|' .. x .. '|' .. y .. '|' .. z )
+					local hash = z + x * mapSizeZ
+					heavenZones[hash] = {
+						thisWidget = true,
+						unitID = unitID,
+						x = x,
+						z = z,
+					}
+				end
 			end
 
 

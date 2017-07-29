@@ -128,8 +128,10 @@ function Optics.new(incPoints, incNeighborMatrix, incMinPoints, incBenchmark)
 						local newRd = math.max(point.cd, DistSq(point, n))
 						if n.rd == nil then
 							n.rd = newRd
+							--this is a bug!!!!
 							seedsPQ:push({newRd, n})
 						elseif newRd < n.rd then
+							--this is a bug!!!!
 							n.rd = newRd
 						end
 					end
