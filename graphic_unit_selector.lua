@@ -177,6 +177,7 @@ local unitTypes = {
 		cloakbomb = true,
 		gunshipbomb = true,
 		jumpbomb = true,
+		amphbomb = true,
 		gunshipheavytrans = true,
 		subtacmissile = true,
 		spiderscout = true,
