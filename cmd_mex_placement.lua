@@ -213,6 +213,19 @@ local function Distance(x1,z1,x2,z2)
 	return dis
 end
 
+local function IsSpotTerraformable(index)
+	if not index then
+		return true
+	end
+	local spot = spotData[index]
+	if not spot then
+		return true
+	end
+
+	local unitID = spot.unitID
+	return unitID == nil --no unit there, can terraform
+end
+
 local function IsSpotBuildable(index)
 	if not index then
 		return true
@@ -366,7 +379,15 @@ local function DoMexTerraform(conses, commands, myTeamID, x, z, heading, shift)
 	local handledExternally = WG.GlobalBuildCommand and WG.GlobalBuildCommand.CommandNotifyRaiseAndBuild(conses, -mexDefID, x, wantedHeight, z, heading, shift)
 
 	if not handledExternally then
-		if wantedHeight ~= y then --in case terraform is required
+		local terraFormPossible = false
+		local spotID = WG.metalSpotsByPos[x] and WG.metalSpotsByPos[x][z]		
+
+		if spotID then
+			--Spring.Utilities.TableEcho(spotData)
+			terraFormPossible = (spotData[spotID] == nil)
+		end
+
+		if terraFormPossible and wantedHeight ~= y then --in case terraform is possible and required
 			--Spring.Echo(wantedHeight, y)
 			local mexRect = {
 				{x = x - mexElmoSize, y = wantedHeight, z = z - mexElmoSize},
