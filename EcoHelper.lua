@@ -228,7 +228,9 @@ local function UpdateFeatures(gf)
 			knownFeatures[fID] = {}
 			knownFeatures[fID].lastScanned = gf
 
-			local fx, fy, fz = Spring.GetFeaturePosition(fID)
+			--local fx, fy, fz = Spring.GetFeaturePosition(fID)
+			local fx, _, fz = Spring.GetFeaturePosition(fID)
+			local fy = Spring.GetGroundHeight(fx, fz)
 			knownFeatures[fID].x = fx
 			knownFeatures[fID].y = fy
 			knownFeatures[fID].z = fz
@@ -246,7 +248,9 @@ local function UpdateFeatures(gf)
 		if knownFeatures[fID] and gf - knownFeatures[fID].lastScanned >= scanInterval then
 			knownFeatures[fID].lastScanned = gf
 
-			local fx, fy, fz = Spring.GetFeaturePosition(fID)
+			--local fx, fy, fz = Spring.GetFeaturePosition(fID)
+			local fx, _, fz = Spring.GetFeaturePosition(fID)
+			local fy = Spring.GetGroundHeight(fx, fz)
 
 			if knownFeatures[fID].x ~= fx or knownFeatures[fID].y ~= fy or knownFeatures[fID].z ~= fz then
 				knownFeatures[fID].x = fx
