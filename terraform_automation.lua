@@ -282,8 +282,9 @@ local function DoMobileUnitLiftPrepare(uId, relHeight, aroundConses)
 			local ratio=30/8 --tune me?
 			local heightTolerance=10 --tune me?
 			local y = spGetGroundHeight(x, z)
-			local y0 = SPGetGroundOrigHeight(x, z)
+			local y0 = spGetGroundOrigHeight(x, z)
 			local dy = math.abs(y0-y)
+			Spring.Echo("dy=",dy)
 			if dy>heightTolerance then
 				local size=2*dy/ratio
 				local rect=GetTerraRectByParams(x, z, size, size, 0, 0, 0)
