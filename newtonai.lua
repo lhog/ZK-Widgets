@@ -1,3 +1,5 @@
+VFS.Include("LuaRules/Configs/customcmds.h.lua")
+
 function widget:GetInfo()
   local version = "Iteration 6"
   local versionnotes = "- newtons now take target collision imminent into effect when determining when to drop the target. Simulates half a second.\n-Newtons also take into consideration if they have line of fire."
@@ -61,12 +63,12 @@ local function GetLowestNumber(list)
   end
   return lowestid
 end
---CMD.ONOFF
+--CMD.ONOFF/CMD_PUSH_PULL
 local function TurnOn(newtonid)
   local states = Spring.GetUnitStates(newtonid)
   if states["active"] == false then
     mynewtons[newtonid].wantedstate = true
-    Spring.GiveOrderToUnit(newtonid,CMD.ONOFF,{1},0)
+    Spring.GiveOrderToUnit(newtonid,CMD_PUSH_PULL,{1},0)
   end
 end
 
@@ -74,7 +76,7 @@ local function TurnOff(newtonid)
   local states = Spring.GetUnitStates(newtonid)
   if states["active"] == true then
     mynewtons[newtonid].wantedstate = false
-    Spring.GiveOrderToUnit(newtonid,CMD.ONOFF,{0},0)
+    Spring.GiveOrderToUnit(newtonid,CMD_PUSH_PULL,{0},0)
   end
 end
 
