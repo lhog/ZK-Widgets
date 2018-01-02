@@ -110,7 +110,7 @@ local energyUnitDefs = {
 	[UnitDefNames["energyfusion"].id] = true,
 }
 local storageUnitDef = UnitDefNames["staticstorage"].id
-local mexUnitDefs = UnitDefNames["staticmex"].id
+local mexUnitDef = UnitDefNames["staticmex"].id
 local caretakerUnitDef = UnitDefNames["staticcon"].id
 local caretakerBuildRange = UnitDefs[caretakerUnitDef].buildDistance
 
@@ -871,9 +871,9 @@ local function SetEcoHighPriority()
 	end
 	for uID, prio in pairs(caretakerUnitsUnderConstruction) do
 		if flashMetalExcess and prio and prio < highPrio then
-			--Spring.Echo("mexUnitsUnderConstruction")
+			--Spring.Echo("caretakerUnitsUnderConstruction")
 			Spring.GiveOrderToUnit(uID, CMD_PRIORITY, {highPrio}, SHIFT_TABLE)
-			mexUnitsUnderConstruction[uID] = highPrio
+			caretakerUnitsUnderConstruction[uID] = highPrio
 		end
 	end
 	for uID, prio in pairs(mexUnitsUnderConstruction) do
