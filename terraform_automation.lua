@@ -74,11 +74,12 @@ unitsToWall[-airfac.id]={}
 unitsToWall[-spiderfac.id]={}
 unitsToWall[-sonar.id]={wte=8}
 unitsToWall[-aegis.id]={h=40}
-
+unitsToWall[-storage.id]={}
 
 local unitsToRaise={}
 --unitsToRaise[-stardust.id]={h=150}
 unitsToRaise[-stardust.id]={h=90}
+unitsToRaise[-faraday.id]={h=90}
 unitsToRaise[-razor.id]={h=30}
 unitsToRaise[-cobra.id]={h=20}
 unitsToRaise[-screamer.id]={h=75}
@@ -93,9 +94,9 @@ unitsToRaise[-gauss.id]={h=150}
 unitsToRaise[-urchin.id]={h=5}
 
 local unitsToLower={}
-unitsToLower[-faraday.id]={h=-56}
+--unitsToLower[-faraday.id]={h=-56}
 --unitsToLower[-gauss.id]={h=-30}
----=== units to terrorm ===---
+---=== units to terraform ===---
 
 local function GetTerraParameters(terraType, points, constructors, teamID, volumeSelection)
 	local terraParams = {}
