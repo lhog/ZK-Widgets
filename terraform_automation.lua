@@ -78,7 +78,7 @@ unitsToWall[-storage.id]={}
 
 local unitsToRaise={}
 --unitsToRaise[-stardust.id]={h=150}
-unitsToRaise[-stardust.id]={h=90}
+unitsToRaise[-newton.id]={h=90}
 unitsToRaise[-faraday.id]={h=90}
 unitsToRaise[-razor.id]={h=30}
 unitsToRaise[-cobra.id]={h=20}
