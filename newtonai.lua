@@ -13,6 +13,7 @@ function widget:GetInfo()
       enabled   = true,
     }
 end
+
 local frametime = 1/30
 local HighPriority = {}
 local mynewtons = {}
@@ -39,13 +40,13 @@ end
 local function getDragAccelerationVec(vx, vy, vz, mass, radius)
     local airDensity = 1.2/4
     local dragCoefficient = 1.0
- 
+
     local sx = vx <= 0 and -1 or 1
     local sy = vy <= 0 and -1 or 1
     local sz = vz <= 0 and -1 or 1
- 
+
     local dragScale = 0.5 * airDensity * dragCoefficient * (math.pi * radius * radius * 0.01 * 0.01)
- 
+
     return
         math.clamp((vx * vx * dragScale * -sx) / mass, -math.abs(vx), math.abs(vx)),
         math.clamp((vy * vy * dragScale * -sy) / mass, -math.abs(vy), math.abs(vy)),
@@ -162,44 +163,60 @@ local function ProcessTargets(targetlist,newtonid)
   return list
 end
 
-local function TrackTarget(newtonid,targetid)
-  if Spring.ValidUnitID(targetid) then
-    local healthremaining,_ = Spring.GetUnitHealth(targetid)
-    local queue = Spring.GetCommandQueue(newtonid,1)
-    local states = Spring.GetUnitStates(newtonid)
-    if not queue[1] or queue[1]["id"] ~= CMD.ATTACK or queue[1]["params"][1] ~= targetid then--not attacking, reissue the comamnd.
-      Spring.GiveOrderToUnit(newtonid,CMD.ATTACK,{targetid},0)
-    end
-    if states["active"] ~= mynewtons[newtonid].wantedstate then
-      Spring.GiveOrderToUnit(newtonid,CMD.STOP,{},0)
-    end
-    local x,y,z = Spring.GetUnitPosition(targetid)
-    local x2,y2,z2 = Spring.GetUnitPosition(newtonid)
-    local distance = DistanceFormula(x,z,x2,z2)
-    if UnitDefs[Spring.GetUnitDefID(targetid)].isGroundUnit then
-      local willhit = WillUnitHitMe(newtonid,targetid)
-    else
-      local willhit = false
-    end
-    --Spring.Echo("target is " .. distance .. " away")
-    if distance >= 459 or healthremaining <= 0 or x == nil or y == nil or z == nil then
-      mynewtons[newtonid]["target"] = nil
-      TurnOff(newtonid)
-      Spring.GiveOrderToUnit(newtonid,CMD.STOP,{shift = true},0)
-    elseif willhit then
-      TurnOn(newtonid)
-    elseif (IsAirborne(targetid) or (distance <= 200 and not IsAirborne(targetid))) and mynewtons[newtonid]["numtargs"] == 1 and not AlwaysAttract[Spring.GetUnitDefID(targetid)] then
-      TurnOn(newtonid)
-    elseif distance >= 200 and not IsAirborne(targetid) and not willhit then
-      TurnOff(newtonid)
-    end
-  elseif Spring.ValidUnitID(targetid) and AlwaysRepel[Spring.GetUnitDefID(targetid)] then
-    TurnOn(newtonid)
-  elseif Spring.ValidUnitID(targetid) and AlwaysAttract[Spring.GetUnitDefID(targetid)] then
-    TurnOff(newtonid)
-  elseif not Spring.ValidUnitID(targetid) or not Spring.GetUnitWeaponHaveFreeLineOfFire(newtonid,1,targetid) then
-    mynewtons[newtonid]["target"] = nil
-  end
+-- Constans
+local TARGET_NONE = 0
+local TARGET_GROUND = 1
+local TARGET_UNIT= 2
+
+local function TrackTarget(newtonid, targetid)
+	if Spring.ValidUnitID(targetid) then
+		local healthremaining,_ = Spring.GetUnitHealth(targetid)
+		local states = Spring.GetUnitStates(newtonid)
+
+		local setTarget
+		local targetType=Spring.GetUnitRulesParam(newtonid,"target_type") or TARGET_NONE
+		if targetType == TARGET_UNIT then
+			setTarget = Spring.GetUnitRulesParam(newtonid, "target_id")
+		end
+
+		if (not setTarget) or (setTarget ~= targetid) then
+			Spring.GiveOrderToUnit(newtonid, CMD_UNIT_SET_TARGET, {targetid}, CMD.OPT_INTERNAL)
+			Spring.Echo("CMD_UNIT_SET_TARGET")
+		end
+
+		if states["active"] ~= mynewtons[newtonid].wantedstate then
+			Spring.GiveOrderToUnit(newtonid,CMD.STOP,{},0)
+		end
+
+		local x,y,z = Spring.GetUnitPosition(targetid)
+		local x2,y2,z2 = Spring.GetUnitPosition(newtonid)
+		local distance = DistanceFormula(x,z,x2,z2)
+
+		if UnitDefs[Spring.GetUnitDefID(targetid)].isGroundUnit then
+			local willhit = WillUnitHitMe(newtonid,targetid)
+		else
+			local willhit = false
+		end
+
+		--Spring.Echo("target is " .. distance .. " away")
+		if distance >= 459 or healthremaining <= 0 or x == nil or y == nil or z == nil then
+			mynewtons[newtonid]["target"] = nil
+			TurnOff(newtonid)
+			Spring.GiveOrderToUnit(newtonid,CMD.STOP,{shift = true},0)
+		elseif willhit then
+			TurnOn(newtonid)
+		elseif (IsAirborne(targetid) or (distance <= 200 and not IsAirborne(targetid))) and mynewtons[newtonid]["numtargs"] == 1 and not AlwaysAttract[Spring.GetUnitDefID(targetid)] then
+			TurnOn(newtonid)
+		elseif distance >= 200 and not IsAirborne(targetid) and not willhit then
+			TurnOff(newtonid)
+		end
+	elseif Spring.ValidUnitID(targetid) and AlwaysRepel[Spring.GetUnitDefID(targetid)] then
+		TurnOn(newtonid)
+	elseif Spring.ValidUnitID(targetid) and AlwaysAttract[Spring.GetUnitDefID(targetid)] then
+		TurnOff(newtonid)
+	elseif not Spring.ValidUnitID(targetid) or not Spring.GetUnitWeaponHaveFreeLineOfFire(newtonid,1,targetid) then
+		mynewtons[newtonid]["target"] = nil
+	end
 end
 
 local function SelectTarget(newtonid)
