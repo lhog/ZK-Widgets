@@ -152,7 +152,7 @@ function widget:GameFrame(frame)
 				if unitAllyTeam ~= myAllyTeamID then --enemy
 					local los = Spring.GetUnitLosState(unit, myAllyTeamID)
 
-					if los then
+					if los and los.typed then
 
 						local health = 0
 						local maxHealth = 0
@@ -172,8 +172,7 @@ function widget:GameFrame(frame)
 
 							local shieldEnabled, currentPower = Spring.GetUnitShieldState(unit)
 							shield = shieldEnabled and math.min(currentPower * 1.2, udShield) -- * 1.2 in case it charges up.
-						elseif los.typed then
-							--assume worst case
+						else							--assume worst case
 							maxHealth = ud.health / ud.armoredMultiple
 							health = maxHealth
 
