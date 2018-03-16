@@ -15,6 +15,8 @@ function widget:GetInfo()
     }
 end
 
+local DEBUG_SWITCH = false
+
 
 local HandledUnitDefIDs = {
 	[UnitDefNames["jumpsumo"].id] =	{ --newton
@@ -116,14 +118,14 @@ local handledGraviUnits = {}
 
 local function SwitchToPush(unitID)
 	if handledGraviUnits[unitID] and Spring.GetUnitStates(unitID)["active"] == false then
-		Spring.Echo("SwitchToPush")
+		if DEBUG_SWITCH then Spring.Echo("SwitchToPush") end
 		Spring.GiveOrderToUnit(unitID, CMD_PUSH_PULL, {1}, 0)
 	end
 end
 
 local function SwitchToPull(unitID)
 	if handledGraviUnits[unitID] and Spring.GetUnitStates(unitID)["active"] == true then
-		Spring.Echo("SwitchToPull")
+		if DEBUG_SWITCH then Spring.Echo("SwitchToPull") end
 		Spring.GiveOrderToUnit(unitID, CMD_PUSH_PULL, {0}, 0)
 	end
 end
